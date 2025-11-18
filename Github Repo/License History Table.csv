@@ -1,0 +1,25 @@
+﻿Year,Event / Format Update,Building Code Reference,Question Format,Notes
+1931,California establishes Structural Engineer (SE) title act.,N/A,Essay/oral examination,California becomes the first state to create a distinct SE license under the Civil Engineers Act.
+1957,California Professional Engineers Act separates CE and SE practice scopes.,N/A,Essay-based problems,Structural Engineers are required for complex structures; aligns with state seismic design focus.
+1980s,California adds Seismic Principles Exam to Civil licensure.,"UBC (edition varies by year), AISC ASD, ACI 318",Multiple choice + essay,Ensures all CEs demonstrate basic earthquake engineering knowledge before SE specialization. Specific code editions not well-documented.
+1997,NCEES introduces Structural I and Structural II exams.,"UBC 1994/1997, AISC ASD 9th Ed, ACI 318, NDS (wood)","SE I: Multiple choice
+SE II: Essay problems","Two-tier national exam system; Structural II recognized by California for SE comity applicants. SE I was 4 hours, SE II was 8 hours. Design primarily used Allowable Stress Design (ASD) methods."
+2000,Exam content updated.,"1997 UBC, SEAOC Blue Book (1996), ASCE 7-95","SE I: Multiple choice
+SE II: Essay problems",Incorporated seismic provisions from regional codes transitioning to national standards.
+2003,NCEES updates design standards references.,"IBC 2000, ASCE 7-02","SE I: Multiple choice
+SE II: Essay problems",Marks shift from regional (UBC) to national building codes (IBC).
+2006,Exam references updated for mid-cycle codes.,"IBC 2006, ASCE 7-05, ACI 318-05/08, AISC 13th Ed (2005)","SE I: Multiple choice
+SE II: Essay problems",Significant wind provision changes in ASCE 7-05. Steel design transitioned to include LRFD methods alongside ASD.
+2010,Exam references updated for mid-cycle codes.,"IBC 2009, ASCE 7-05, ACI 318-05/08, AISC 13th Ed (2005)","SE I: Multiple choice
+SE II: Essay problems",Significant wind provision changes in ASCE 7-05. Steel design transitioned to include LRFD methods alongside ASD.
+2011,NCEES launches 16-hour Structural Engineering Exam.,"IBC 2009, ASCE 7-05, ACI 318-08","Breadth: Multiple choice (40 questions)
+Depth: Essay problems (4-6 per section)",Replaces SE I/II with two 8-hour components (Vertical and Lateral). Each component has a 4-hour breadth section and 4-hour depth section. Hand calculations required for depth problems.
+2015,Exam specifications revised.,"IBC 2012, ASCE 7-10, ACI 318-11","Breadth: Multiple choice (40 questions)
+Depth: Essay problems (4-6 per section)",Updated lateral load procedures and concrete detailing requirements. Depth problems remained hand-calculated with full documentation.
+2018,Minor specification updates.,"IBC 2015, ASCE 7-10, ACI 318-11","Breadth: Multiple choice (40 questions)
+Depth: Essay problems (4-6 per section)",Revisions aligned with adoption of updated building codes in most U.S. jurisdictions.
+2023,Final pencil-and-paper SE exam (October 2023).,"IBC 2015, ASCE 7-10, ACI 318-11","Breadth: Multiple choice (40 questions)
+Depth: Essay problems (4-6 per section)","Last administration before transition to computer-based testing (CBT). Required physical reference materials (books, codes)."
+2024,NCEES transitions SE exam to CBT format (April 2024).,"IBC 2018, ASCE 7-16, ACI 318-14","Breadth: 55 multiple choice (45 scored, 10 pretest)
+Depth: 60 questions (40 scored, 20 pretest) in 5 scenarios","Four separate modules: Vertical Breadth (6 hrs), Vertical Depth (5.5 hrs), Lateral Breadth (6 hrs), Lateral Depth (5.5 hrs). Total exam time is 23 hours across 4 tests. Breadth sections administered year-round; depth sections twice per year (April/October). Digital reference handbook provided. Depth sections are scenario-based with alternative item types (fill-in, point-and-click). No more hand-written essay solutions."
+,,,,
