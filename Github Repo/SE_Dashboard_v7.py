@@ -173,7 +173,8 @@ def load_timeline_events() -> Optional[pd.DataFrame]:
 def create_filters(df):
     filters = {}
 
-    # Timeline events toggle at the very top of the sidebar
+    st.sidebar.header("🔍 Data Filters")
+    # Timeline events toggle at the very top of the Data Filters section
     events_df_present = load_timeline_events() is not None
     filters['show_events'] = st.sidebar.checkbox(
         "Show timeline events",
@@ -181,8 +182,6 @@ def create_filters(df):
         help="Toggle overlays of exam/code history on charts (if available).",
         key='show_events_toggle'
     )
-
-    st.sidebar.header("🔍 Data Filters")
 
     st.sidebar.subheader("State")
     states = sorted(df['State'].dropna().unique().tolist()) if 'State' in df.columns else []
