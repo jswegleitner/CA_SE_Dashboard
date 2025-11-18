@@ -17,6 +17,7 @@ import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
 import re
+import textwrap
 from typing import Optional
 
 # ---------- Data loading ----------
@@ -168,6 +169,30 @@ def load_timeline_events() -> Optional[pd.DataFrame]:
     # Drop rows without valid start dates
     out = out.dropna(subset=['start_date']).reset_index(drop=True)
     return out
+
+# ---------- Helpers ----------
+def _wrap_html(text: str, width: int = 100) -> str:
+    """Wrap plain text to a target width and convert newlines to <br> for Plotly hovers."""
+    if not text:
+        return ''
+    # First split on any existing <br> markers so we don’t reflow deliberate breaks
+    parts = str(text).split('<br>')
+    wrapped_parts = [textwrap.fill(p.strip(), width=width, break_long_words=False, break_on_hyphens=False) for p in parts]
+    return '<br>'.join(wrapped_parts).replace('\n', '<br>')
+
+def format_event_description(desc: str) -> str:
+    """Insert line breaks before known field labels and wrap to reasonable width."""
+    if desc is None:
+        return ''
+    s = str(desc)
+    # Add hard breaks before common field labels to create readable blocks
+    tokens = [
+        'Codes:', 'Format:', 'Breadth:', 'Depth:', 'Notes:', 'Vertical:', 'Lateral:', 'Updated:', 'Components:'
+    ]
+    for tok in tokens:
+        s = s.replace(f' {tok}', f'<br>{tok}')
+    # Final wrapping for each segment
+    return _wrap_html(s, width=110)
 
 # ---------- Filters & visuals (updated with Plotly) ----------
 def create_filters(df):
@@ -335,7 +360,40 @@ def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_
         df_viz['Period'] = df_viz['Original Issue Date'].dt.to_period('M')
         title_period = "Monthly"
 
-    license_counts = df_viz.groupby('Period').size().sort_index()
+    # Build full period range to include empty buckets (e.g., ensure 1980 appears even if zero)
+    if bucket_size == "Yearly":
+        full_index = None
+        if start_year is not None and end_year is not None:
+            full_index = pd.period_range(start=f"{int(start_year)}-01-01", end=f"{int(end_year)}-12-31", freq='Y')
+        license_counts = df_viz.groupby('Period').size()
+        if full_index is not None:
+            license_counts = license_counts.reindex(full_index, fill_value=0)
+        license_counts = license_counts.sort_index()
+    elif bucket_size == "Monthly":
+        full_index = None
+        if start_year is not None and end_year is not None:
+            full_index = pd.period_range(start=f"{int(start_year)}-01-01", end=f"{int(end_year)}-12-31", freq='M')
+        license_counts = df_viz.groupby('Period').size()
+        if full_index is not None:
+            license_counts = license_counts.reindex(full_index, fill_value=0)
+        license_counts = license_counts.sort_index()
+    elif bucket_size == "Half-Yearly":
+        license_counts = df_viz.groupby('Period').size()
+        if start_year is not None and end_year is not None:
+            labels = []
+            for y in range(int(start_year), int(end_year) + 1):
+                labels.append(f"{y}-H1")
+                labels.append(f"{y}-H2")
+            license_counts = license_counts.reindex(labels, fill_value=0)
+        license_counts = license_counts.sort_index()
+    else:  # Quarterly
+        full_index = None
+        if start_year is not None and end_year is not None:
+            full_index = pd.period_range(start=f"{int(start_year)}-01-01", end=f"{int(end_year)}-12-31", freq='Q')
+        license_counts = df_viz.groupby('Period').size()
+        if full_index is not None:
+            license_counts = license_counts.reindex(full_index, fill_value=0)
+        license_counts = license_counts.sort_index()
 
     if license_counts.empty:
         st.info("No time-series data for the selected filters.")
@@ -359,7 +417,8 @@ def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_
         showlegend=False,
         height=500,
         hovermode='x unified',
-        dragmode='zoom'
+        dragmode='zoom',
+        hoverlabel=dict(align='left')
     )
 
     num_periods = len(license_counts)
@@ -412,6 +471,9 @@ def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_
             # Year-only text in red; full details in hover
             text_year = ev['start_date'].dt.year.astype('Int64').astype(str).fillna('')
 
+            # Pre-format description with line breaks and wrapping
+            ev_desc = ev['description'].fillna('').map(format_event_description)
+
             fig.add_trace(go.Scatter(
                 x=ev['bucket'],
                 y=[-pad] * len(ev),
@@ -431,7 +493,7 @@ def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_
                     ev['label'].fillna(''),
                     ev['start_date'].dt.strftime('%Y-%m-%d'),
                     ev['type'].astype(str),
-                    ev['description'].fillna('')
+                    ev_desc
                 ], axis=1).values
             ))
 
@@ -515,7 +577,8 @@ def plot_time_series_line(filtered_df, bucket_size: str, lock_y: bool = True, ev
         yaxis_title=y_label,
         height=420,
         hovermode='x unified',
-        dragmode='zoom'
+        dragmode='zoom',
+        hoverlabel=dict(align='left')
     )
 
     # Allow zooming on X; optionally lock Y so it doesn't rescale
@@ -552,6 +615,9 @@ def plot_time_series_line(filtered_df, bucket_size: str, lock_y: bool = True, ev
             ev = ev[(ev['start_date'].dt.year >= start_year) & (ev['start_date'].dt.year <= end_year)]
         if not ev.empty:
             # Add all invisible markers at a fixed y just above the line to enable hover
+            # Pre-format description with line breaks and wrapping
+            ev_desc = ev['description'].fillna('').map(format_event_description)
+
             fig.add_trace(go.Scatter(
                 x=ev['start_date'],
                 y=[y_max + head * 0.8] * len(ev),
@@ -567,7 +633,7 @@ def plot_time_series_line(filtered_df, bucket_size: str, lock_y: bool = True, ev
                 customdata=pd.concat([
                     ev['label'].fillna(''),
                     ev['type'].astype(str),
-                    ev['description'].fillna('')
+                    ev_desc
                 ], axis=1).values,
                 showlegend=False
             ))
