@@ -1,6 +1,7 @@
 start_date,end_date,label,type,Code,Format,Notes
-1931-01-01,,California establishes Structural Engineer (SE) title act.,SE Exam,,Essay/oral examination,California becomes the first state to create a distinct SE license under the Civil Engineers Act.
-1957-01-01,,California Professional Engineers Act separates CE and SE practice scopes.,SE Exam,,Essay-based problems,Structural Engineers are required for complex structures; aligns with state seismic design focus.
+1931-01-01,,California establishes Structural Engineer (SE) title act.,SE Exam,nan,Essay/oral examination,California becomes the first state to create a distinct SE license under the Civil Engineers Act.
+1957-01-01,,California Professional Engineers Act separates CE and SE practice scopes.,SE Exam,nan,Essay-based problems,Structural Engineers are required for complex structures; aligns with state seismic design focus.
+1988-01-01,,California adds Seismic Principles Exam to Civil licensure.,SE Exam,"UBC (edition varies by year), AISC ASD, ACI 318",Multiple choice + essay,Ensures all CEs demonstrate basic earthquake engineering knowledge before SE specialization. Specific code editions not well-documented.
 1997-01-01,,NCEES introduces Structural I and Structural II exams.,SE Exam,"UBC 1994/1997, AISC ASD 9th Ed, ACI 318, NDS (wood)","SE I: Multiple choice
 SE II: Essay problems","Two-tier national exam system; Structural II recognized by California for SE comity applicants. SE I was 4 hours, SE II was 8 hours. Design primarily used Allowable Stress Design (ASD) methods."
 2000-01-01,,Exam content updated.,SE Exam,"1997 UBC, SEAOC Blue Book (1996), ASCE 7-95","SE I: Multiple choice

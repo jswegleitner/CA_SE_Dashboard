@@ -3,54 +3,41 @@ from pathlib import Path
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / 'timeline_events.csv'
-DST = SRC  # in-place rewrite as requested
+SOURCE_TABLE = ROOT / 'License History Table.csv'
+DST = ROOT / 'timeline_events.csv'
 
-if not SRC.exists():
-    raise SystemExit(f"Source file not found: {SRC}")
+if not SOURCE_TABLE.exists():
+    raise SystemExit(f"Source file not found: {SOURCE_TABLE}")
 
-df = pd.read_csv(SRC)
+df = pd.read_csv(SOURCE_TABLE)
 
 # Normalize expected columns
 cols = {c.lower().strip(): c for c in df.columns}
 get = lambda name: cols.get(name)
 
-s_col = get('start_date') or get('start') or get('date')
-e_col = get('end_date') or get('end')
-l_col = get('label') or get('title')
-d_col = get('description') or get('details')
-t_col = get('type') or get('category')
+s_col = get('year')
+l_col = get('event / format update') or get('event') or get('label')
+code_col = get('building code reference') or get('code') or get('codes')
+fmt_col = get('question format') or get('format')
+notes_col = get('notes')
 
-if not s_col or not l_col or not t_col:
-    raise SystemExit('Timeline CSV missing required columns (start_date/label/type).')
+if not s_col or not l_col:
+    raise SystemExit('Source CSV missing required columns (Year or Event / Format Update).')
 
 out = pd.DataFrame()
-out['start_date'] = pd.to_datetime(df[s_col], errors='coerce').dt.strftime('%Y-%m-%d')
-out['end_date'] = pd.to_datetime(df[e_col], errors='coerce').dt.strftime('%Y-%m-%d') if e_col in df.columns else ''
+# Convert Year to YYYY-01-01 start_date format
+out['start_date'] = pd.to_datetime(df[s_col].astype(str) + '-01-01', errors='coerce').dt.strftime('%Y-%m-%d')
+out['end_date'] = ''
 out['label'] = df[l_col].fillna('')
-out['type'] = df[t_col].fillna('Event')
+out['type'] = 'SE Exam'
 
 code_vals, fmt_vals, notes_vals = [], [], []
 
-def extract_block(text: str, token: str) -> str:
-    if not isinstance(text, str):
-        return ''
-    pattern = re.compile(rf"{re.escape(token)}\s*(.*?)(?:(?:\n|\r)\s*(Codes:|Format:|Notes:)|$)", re.IGNORECASE | re.DOTALL)
-    m = pattern.search(text)
-    if not m:
-        return ''
-    val = m.group(1).strip()
-    # Collapse internal whitespace a bit but keep line breaks
-    val = re.sub(r"\s*\n\s*", "\n", val)
-    return val
-
-for desc in (df[d_col] if d_col in df.columns else ['']*len(df)):
-    codes = extract_block(desc, 'Codes:')
-    fmt = extract_block(desc, 'Format:')
-    notes = extract_block(desc, 'Notes:')
-    code_vals.append(codes)
-    fmt_vals.append(fmt)
-    notes_vals.append(notes)
+# Extract structured fields from the source CSV columns
+for idx in df.index:
+    code_vals.append(str(df.at[idx, code_col]) if code_col and code_col in df.columns else '')
+    fmt_vals.append(str(df.at[idx, fmt_col]) if fmt_col and fmt_col in df.columns else '')
+    notes_vals.append(str(df.at[idx, notes_col]) if notes_col and notes_col in df.columns else '')
 
 out['Code'] = code_vals
 out['Format'] = fmt_vals
