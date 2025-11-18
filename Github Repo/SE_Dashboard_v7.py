@@ -541,7 +541,7 @@ def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_
                 name='Events',
                 marker=dict(symbol='triangle-up', size=10, color='crimson'),
                 text=text_year,
-                textposition='top center',
+                textposition='bottom center',
                 textfont=dict(color='crimson'),
                 hovertemplate=(
                     '<b>%{customdata[0]}</b><br>'  # label
@@ -719,8 +719,8 @@ def plot_time_series_line(filtered_df, bucket_size: str, lock_y: bool = True, ev
                 except Exception:
                     year_txt = ''
                 if year_txt:
-                    fig.add_annotation(x=xdt, y=y_max + head * 0.9, text=year_txt,
-                                       showarrow=False, font=dict(color='crimson', size=10))
+                    fig.add_annotation(x=xdt, y=y_max + head * 0.8, text=year_txt,
+                                       showarrow=False, font=dict(color='crimson', size=10), yanchor='top')
 
     st.plotly_chart(fig, use_container_width=True)
 
