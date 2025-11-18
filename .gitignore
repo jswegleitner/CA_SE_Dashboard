@@ -1,0 +1,9 @@
+# Ignore everything in the root
+*
+
+# But don't ignore the Github Repo folder and its contents
+!Github Repo/
+!Github Repo/**
+
+# Don't ignore this .gitignore file
+!.gitignore
