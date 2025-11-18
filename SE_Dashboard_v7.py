@@ -523,6 +523,9 @@ def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_
                 ]
             else:
                 ev_desc = ev['description'].fillna('').map(format_event_description)
+            # Ensure Series type for concat
+            if not isinstance(ev_desc, pd.Series):
+                ev_desc = pd.Series(ev_desc, index=ev.index)
 
             fig.add_trace(go.Scatter(
                 x=ev['bucket'],
@@ -673,6 +676,9 @@ def plot_time_series_line(filtered_df, bucket_size: str, lock_y: bool = True, ev
                 ]
             else:
                 ev_desc = ev['description'].fillna('').map(format_event_description)
+            # Ensure Series type for concat
+            if not isinstance(ev_desc, pd.Series):
+                ev_desc = pd.Series(ev_desc, index=ev.index)
 
             fig.add_trace(go.Scatter(
                 x=ev['start_date'],
