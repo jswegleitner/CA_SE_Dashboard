@@ -171,8 +171,18 @@ def load_timeline_events() -> Optional[pd.DataFrame]:
 
 # ---------- Filters & visuals (updated with Plotly) ----------
 def create_filters(df):
-    st.sidebar.header("🔍 Data Filters")
     filters = {}
+
+    # Timeline events toggle at the very top of the sidebar
+    events_df_present = load_timeline_events() is not None
+    filters['show_events'] = st.sidebar.checkbox(
+        "Show timeline events",
+        value=events_df_present,
+        help="Toggle overlays of exam/code history on charts (if available).",
+        key='show_events_toggle'
+    )
+
+    st.sidebar.header("🔍 Data Filters")
 
     st.sidebar.subheader("State")
     states = sorted(df['State'].dropna().unique().tolist()) if 'State' in df.columns else []
@@ -218,21 +228,8 @@ def create_filters(df):
         help="Active = not yet expired, Expired = past expiration date. Select both for all licenses."
     )
 
-    # Timeline events controls
-    st.sidebar.subheader("📌 Timeline Events")
-    events_df = load_timeline_events()
-    filters['show_events'] = st.sidebar.checkbox(
-        "Overlay events on time-series charts",
-        value=events_df is not None,
-        help="If a `timeline_events.csv` is present, overlay event markers/bands on the charts."
-    )
-    if events_df is not None and not events_df.empty:
-        event_types = sorted(events_df['type'].dropna().astype(str).unique().tolist())
-        filters['event_types'] = st.sidebar.multiselect(
-            "Event types to show:", options=event_types, default=event_types
-        )
-    else:
-        filters['event_types'] = []
+    # Small hint if no events file present
+    if not events_df_present:
         st.sidebar.caption("Add `timeline_events.csv` with columns: start_date, end_date (optional), label, description, type.")
     return filters
 
@@ -274,7 +271,7 @@ def apply_filters(df, filters):
 
     return filtered_df
 
-def create_visualizations(filtered_df):
+def create_visualizations(filtered_df, show_events: bool):
     if filtered_df is None or filtered_df.empty:
         st.warning("No data to visualize with current filters.")
         return
@@ -287,15 +284,12 @@ def create_visualizations(filtered_df):
         bucket_size = st.selectbox("Time Grouping:", ["Yearly", "Half-Yearly", "Quarterly", "Monthly"]) 
         lock_y = st.checkbox("Lock Y-axis when zooming", value=True, help="When checked, zooming/panning will only affect the X axis; Y axis will remain fixed.")
 
-    # Load events and selected types from sidebar
+    # Load events (if present)
     events_df = load_timeline_events()
-    selected_types = st.session_state.get('event_types', None)
-    # Fallback: re-read from filters if present via session keys we set in create_filters
-    # We won't fail if not present; charts will just render without events.
     # Time series
-    plot_time_series(filtered_df, bucket_size, lock_y, events_df=events_df)
+    plot_time_series(filtered_df, bucket_size, lock_y, events_df=events_df, show_events=show_events)
     # Line chart variant
-    plot_time_series_line(filtered_df, bucket_size, lock_y, events_df=events_df)
+    plot_time_series_line(filtered_df, bucket_size, lock_y, events_df=events_df, show_events=show_events)
     st.markdown("---")
 
     # By State
@@ -319,7 +313,7 @@ def create_visualizations(filtered_df):
         st.markdown("---")
 
 
-def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_df: Optional[pd.DataFrame] = None):
+def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_df: Optional[pd.DataFrame] = None, show_events: bool = False):
     if 'Original Issue Date' not in filtered_df.columns or not pd.api.types.is_datetime64_any_dtype(filtered_df['Original Issue Date']):
         st.info("Original Issue Date column not found or not datetime.")
         return
@@ -380,7 +374,7 @@ def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_
     fig.update_yaxes(fixedrange=lock_y)
 
     # Overlay timeline events as markers aligned to the current bucket
-    if events_df is not None and not events_df.empty and st.session_state.get('show_events', True):
+    if show_events and (events_df is not None) and (not events_df.empty):
         # Map event start dates to the current bucket label used on x-axis
         def to_bucket_label(dt):
             if pd.isna(dt):
@@ -442,7 +436,7 @@ def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_
         with c3: st.metric("Average per Period", f"{license_counts.mean():.1f}")
 
 
-def plot_time_series_line(filtered_df, bucket_size: str, lock_y: bool = True, events_df: Optional[pd.DataFrame] = None):
+def plot_time_series_line(filtered_df, bucket_size: str, lock_y: bool = True, events_df: Optional[pd.DataFrame] = None, show_events: bool = False):
     """
     Line chart of licenses over time. X axis is a datetime representing the start of the
     selected period (year/half/quarter/month) and Y is the number of licenses issued.
@@ -521,7 +515,7 @@ def plot_time_series_line(filtered_df, bucket_size: str, lock_y: bool = True, ev
     fig.update_yaxes(fixedrange=lock_y)
 
     # Overlay timeline events as vertical lines on the datetime X axis
-    if events_df is not None and not events_df.empty and st.session_state.get('show_events', True):
+    if show_events and (events_df is not None) and (not events_df.empty):
         # Create consistent colors by event type
         type_styles = {}
         palette = ['crimson', 'darkorange', 'seagreen', 'mediumpurple', 'teal', 'goldenrod']
@@ -933,7 +927,7 @@ def main():
         st.warning("🔍 No records match the selected filters. Try adjusting your filter criteria.")
         return
 
-    create_visualizations(filtered_df)
+    create_visualizations(filtered_df, filters.get('show_events', False))
 
     # Table
     st.subheader("📋 Filtered Data Table")
