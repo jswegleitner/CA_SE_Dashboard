@@ -150,6 +150,9 @@ def load_timeline_events() -> Optional[pd.DataFrame]:
     e_col = col('end_date') or col('end')
     l_col = col('label') or col('title')
     d_col = col('description') or col('details')
+    code_col = col('code') or col('codes')
+    fmt_col = col('format')
+    notes_col = col('notes')
     t_col = col('type') or col('category')
 
     if not s_col:
@@ -163,8 +166,38 @@ def load_timeline_events() -> Optional[pd.DataFrame]:
     else:
         out['end_date'] = pd.NaT
     out['label'] = df[l_col] if l_col in df.columns else ''
-    out['description'] = df[d_col] if d_col in df.columns else ''
     out['type'] = df[t_col] if t_col in df.columns else 'Event'
+
+    # Prefer structured fields if present; else try to parse description
+    if any(x in df.columns for x in filter(None, [code_col, fmt_col, notes_col])):
+        out['code'] = df[code_col] if code_col in df.columns else ''
+        out['format'] = df[fmt_col] if fmt_col in df.columns else ''
+        out['notes'] = df[notes_col] if notes_col in df.columns else ''
+        # Also provide a combined description for legacy callers
+        out['description'] = (
+            'Codes: ' + out['code'].fillna('') + '\n' +
+            'Format: ' + out['format'].fillna('') + '\n' +
+            'Notes: ' + out['notes'].fillna('')
+        ).str.strip()
+    else:
+        # Keep original description, but try splitting into fields for downstream formatting
+        desc_series = df[d_col] if d_col in df.columns else pd.Series([''] * len(df))
+        out['description'] = desc_series
+        # Quick token extraction for code/format/notes within single description text
+        def extract_token(s: str, token: str):
+            import re as _re
+            if not isinstance(s, str):
+                return ''
+            # Capture text after token label until next token or end
+            pattern = _re.compile(rf"{token}\s*(.*?)(?:(?:\n|\r)\s*(Codes:|Format:|Notes:)|$)", _re.IGNORECASE | _re.DOTALL)
+            m = pattern.search(s)
+            if not m:
+                return ''
+            return m.group(1).strip()
+
+        out['code'] = desc_series.apply(lambda x: extract_token(x, 'Codes:'))
+        out['format'] = desc_series.apply(lambda x: extract_token(x, 'Format:'))
+        out['notes'] = desc_series.apply(lambda x: extract_token(x, 'Notes:'))
 
     # Drop rows without valid start dates
     out = out.dropna(subset=['start_date']).reset_index(drop=True)
@@ -193,6 +226,17 @@ def format_event_description(desc: str) -> str:
         s = s.replace(f' {tok}', f'<br>{tok}')
     # Final wrapping for each segment
     return _wrap_html(s, width=110)
+
+def build_event_description_from_fields(code: str, fmt: str, notes: str) -> str:
+    parts = []
+    if code and str(code).strip():
+        parts.append(f"Codes: {code}")
+    if fmt and str(fmt).strip():
+        parts.append(f"Format: {fmt}")
+    if notes and str(notes).strip():
+        parts.append(f"Notes: {notes}")
+    combined = '\n'.join(parts)
+    return format_event_description(combined)
 
 # ---------- Filters & visuals (updated with Plotly) ----------
 def create_filters(df):
@@ -471,8 +515,14 @@ def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_
             # Year-only text in red; full details in hover
             text_year = ev['start_date'].dt.year.astype('Int64').astype(str).fillna('')
 
-            # Pre-format description with line breaks and wrapping
-            ev_desc = ev['description'].fillna('').map(format_event_description)
+            # Prefer structured fields if present
+            if all(col in ev.columns for col in ['code', 'format', 'notes']):
+                ev_desc = [
+                    build_event_description_from_fields(c, f, n)
+                    for c, f, n in zip(ev['code'].fillna(''), ev['format'].fillna(''), ev['notes'].fillna(''))
+                ]
+            else:
+                ev_desc = ev['description'].fillna('').map(format_event_description)
 
             fig.add_trace(go.Scatter(
                 x=ev['bucket'],
@@ -615,8 +665,14 @@ def plot_time_series_line(filtered_df, bucket_size: str, lock_y: bool = True, ev
             ev = ev[(ev['start_date'].dt.year >= start_year) & (ev['start_date'].dt.year <= end_year)]
         if not ev.empty:
             # Add all invisible markers at a fixed y just above the line to enable hover
-            # Pre-format description with line breaks and wrapping
-            ev_desc = ev['description'].fillna('').map(format_event_description)
+            # Prefer structured fields if present
+            if all(col in ev.columns for col in ['code', 'format', 'notes']):
+                ev_desc = [
+                    build_event_description_from_fields(c, f, n)
+                    for c, f, n in zip(ev['code'].fillna(''), ev['format'].fillna(''), ev['notes'].fillna(''))
+                ]
+            else:
+                ev_desc = ev['description'].fillna('').map(format_event_description)
 
             fig.add_trace(go.Scatter(
                 x=ev['start_date'],
