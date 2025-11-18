@@ -720,7 +720,9 @@ def plot_time_series_line(filtered_df, bucket_size: str, lock_y: bool = True, ev
                     year_txt = ''
                 if year_txt:
                     y_min = float(pd.Series(yvals).min()) if len(yvals) else 0.0
-                    fig.add_annotation(x=xdt, y=y_min - head * 0.1, text=year_txt,
+                    # Position label below the graph data but above x-axis ticks
+                    label_y = y_min - (y_max - y_min) * 0.05
+                    fig.add_annotation(x=xdt, y=label_y, text=year_txt,
                                        showarrow=False, font=dict(color='crimson', size=10), yanchor='top')
 
     st.plotly_chart(fig, use_container_width=True)
