@@ -401,34 +401,32 @@ def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_
         ev['bucket'] = ev['start_date'].apply(to_bucket_label)
         ev = ev.dropna(subset=['bucket'])
         if not ev.empty:
-            # Keep labels within chart bounds
+            # Place markers at the bottom of the chart (slightly below 0)
             y_max = max(license_counts.values) if len(license_counts) else 0
-            fig.update_yaxes(range=[0, y_max * 1.15])
-            # Choose colors per type
-            type_colors = {}
-            palette = ['crimson', 'darkorange', 'seagreen', 'mediumpurple', 'teal', 'goldenrod']
-            for i, t in enumerate(ev['type'].astype(str).unique()):
-                type_colors[t] = palette[i % len(palette)]
+            pad = max(1, y_max * 0.06)
+            # Extend y-axis to include a small negative region for markers
+            fig.update_yaxes(range=[-pad * 1.4, y_max * 1.05])
 
-            # Add a single scatter trace grouping all events for legend clarity
+            # Year-only text in red; full details in hover
+            text_year = ev['start_date'].dt.year.astype('Int64').astype(str).fillna('')
+
             fig.add_trace(go.Scatter(
                 x=ev['bucket'],
-                y=[y_max * 1.1] * len(ev),
+                y=[-pad] * len(ev),
                 mode='markers+text',
                 name='Events',
-                marker=dict(
-                    symbol='triangle-up', size=10,
-                    color=[type_colors.get(t, 'gray') for t in ev['type'].astype(str)]
-                ),
-                text=ev['label'].fillna(''),
+                marker=dict(symbol='triangle-up', size=10, color='crimson'),
+                text=text_year,
                 textposition='top center',
+                textfont=dict(color='crimson'),
                 hovertemplate=(
-                    '<b>%{text}</b><br>'
-                    'Date: %{customdata[0]}<br>'
-                    'Type: %{customdata[1]}<br>'
-                    '%{customdata[2]|s}<extra></extra>'
+                    '<b>%{customdata[0]}</b><br>'  # label
+                    'Date: %{customdata[1]}<br>'
+                    'Type: %{customdata[2]}<br>'
+                    '%{customdata[3]|s}<extra></extra>'
                 ),
                 customdata=pd.concat([
+                    ev['label'].fillna(''),
                     ev['start_date'].dt.strftime('%Y-%m-%d'),
                     ev['type'].astype(str),
                     ev['description'].fillna('')
