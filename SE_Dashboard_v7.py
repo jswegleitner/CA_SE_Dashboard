@@ -713,13 +713,14 @@ def plot_time_series_line(filtered_df, bucket_size: str, lock_y: bool = True, ev
                 dash = type_styles.get(t, dict(dash='dot'))['dash']
                 xdt = r['start_date']
                 fig.add_vline(x=xdt, line=dict(color=color, dash=dash, width=1))
-                # Year-only label in red near the top
+                # Year-only label in red at bottom of vline (just above x-axis)
                 try:
                     year_txt = str(pd.to_datetime(xdt).year)
                 except Exception:
                     year_txt = ''
                 if year_txt:
-                    fig.add_annotation(x=xdt, y=y_max + head * 0.8, text=year_txt,
+                    y_min = float(pd.Series(yvals).min()) if len(yvals) else 0.0
+                    fig.add_annotation(x=xdt, y=y_min - head * 0.1, text=year_txt,
                                        showarrow=False, font=dict(color='crimson', size=10), yanchor='top')
 
     st.plotly_chart(fig, use_container_width=True)
