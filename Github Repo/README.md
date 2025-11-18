@@ -79,6 +79,34 @@ your_project_folder/
 - **Skip options** - Reuse existing downloaded files
 - **Progress tracking** - Clear status updates at each step
 
+## Timeline Events (Exam/Code History)
+
+The dashboard overlays key timeline events on time‑series charts using `Github Repo/timeline_events.csv`.
+
+Required columns:
+- `start_date` (YYYY‑MM‑DD)
+- `label` (short title)
+- `type` (e.g., `SE Exam`)
+
+Preferred detail columns:
+- `Code` — code references (e.g., IBC/ASCE/ACI)
+- `Format` — exam format details
+- `Notes` — additional context
+
+If your CSV only has a single `description` field (with lines starting `Codes:`, `Format:`, `Notes:`), the app parses it automatically.
+
+Update the timeline file (Windows PowerShell):
+
+```powershell
+Push-Location "C:\Users\jwegleitner\OneDrive\Documents\Side Projects\CA License Dashboard\Github Repo"
+& 'C:/Users/jwegleitner/Miniforge3/python.exe' tools/reprocess_timeline.py
+git add "Github Repo/timeline_events.csv"; git commit -m "Update timeline events"; git push origin main
+```
+
+Notes:
+- The events toggle is under "🔍 Data Filters" in the sidebar.
+- Date filters constrain both charts and events; events do not extend axes.
+
 ## Troubleshooting
 
 ### Common Issues
