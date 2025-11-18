@@ -1,0 +1,45 @@
+start_date,end_date,label,description,type
+1931-01-01,,California establishes Structural Engineer (SE) title act.,"Format: Essay/oral examination
+Notes: California becomes the first state to create a distinct SE license under the Civil Engineers Act.",SE Exam
+1957-01-01,,California Professional Engineers Act separates CE and SE practice scopes.,"Format: Essay-based problems
+Notes: Structural Engineers are required for complex structures; aligns with state seismic design focus.",SE Exam
+1997-01-01,,NCEES introduces Structural I and Structural II exams.,"Codes: UBC 1994/1997, AISC ASD 9th Ed, ACI 318, NDS (wood)
+Format: SE I: Multiple choice
+SE II: Essay problems
+Notes: Two-tier national exam system; Structural II recognized by California for SE comity applicants. SE I was 4 hours, SE II was 8 hours. Design primarily used Allowable Stress Design (ASD) methods.",SE Exam
+2000-01-01,,Exam content updated.,"Codes: 1997 UBC, SEAOC Blue Book (1996), ASCE 7-95
+Format: SE I: Multiple choice
+SE II: Essay problems
+Notes: Incorporated seismic provisions from regional codes transitioning to national standards.",SE Exam
+2003-01-01,,NCEES updates design standards references.,"Codes: IBC 2000, ASCE 7-02
+Format: SE I: Multiple choice
+SE II: Essay problems
+Notes: Marks shift from regional (UBC) to national building codes (IBC).",SE Exam
+2006-01-01,,Exam references updated for mid-cycle codes.,"Codes: IBC 2006, ASCE 7-05, ACI 318-05/08, AISC 13th Ed (2005)
+Format: SE I: Multiple choice
+SE II: Essay problems
+Notes: Significant wind provision changes in ASCE 7-05. Steel design transitioned to include LRFD methods alongside ASD.",SE Exam
+2010-01-01,,Exam references updated for mid-cycle codes.,"Codes: IBC 2009, ASCE 7-05, ACI 318-05/08, AISC 13th Ed (2005)
+Format: SE I: Multiple choice
+SE II: Essay problems
+Notes: Significant wind provision changes in ASCE 7-05. Steel design transitioned to include LRFD methods alongside ASD.",SE Exam
+2011-01-01,,NCEES launches 16-hour Structural Engineering Exam.,"Codes: IBC 2009, ASCE 7-05, ACI 318-08
+Format: Breadth: Multiple choice (40 questions)
+Depth: Essay problems (4-6 per section)
+Notes: Replaces SE I/II with two 8-hour components (Vertical and Lateral). Each component has a 4-hour breadth section and 4-hour depth section. Hand calculations required for depth problems.",SE Exam
+2015-01-01,,Exam specifications revised.,"Codes: IBC 2012, ASCE 7-10, ACI 318-11
+Format: Breadth: Multiple choice (40 questions)
+Depth: Essay problems (4-6 per section)
+Notes: Updated lateral load procedures and concrete detailing requirements. Depth problems remained hand-calculated with full documentation.",SE Exam
+2018-01-01,,Minor specification updates.,"Codes: IBC 2015, ASCE 7-10, ACI 318-11
+Format: Breadth: Multiple choice (40 questions)
+Depth: Essay problems (4-6 per section)
+Notes: Revisions aligned with adoption of updated building codes in most U.S. jurisdictions.",SE Exam
+2023-01-01,,Final pencil-and-paper SE exam (October 2023).,"Codes: IBC 2015, ASCE 7-10, ACI 318-11
+Format: Breadth: Multiple choice (40 questions)
+Depth: Essay problems (4-6 per section)
+Notes: Last administration before transition to computer-based testing (CBT). Required physical reference materials (books, codes).",SE Exam
+2024-01-01,,NCEES transitions SE exam to CBT format (April 2024).,"Codes: IBC 2018, ASCE 7-16, ACI 318-14
+Format: Breadth: 55 multiple choice (45 scored, 10 pretest)
+Depth: 60 questions (40 scored, 20 pretest) in 5 scenarios
+Notes: Four separate modules: Vertical Breadth (6 hrs), Vertical Depth (5.5 hrs), Lateral Breadth (6 hrs), Lateral Depth (5.5 hrs). Total exam time is 23 hours across 4 tests. Breadth sections administered year-round; depth sections twice per year (April/October). Digital reference handbook provided. Depth sections are scenario-based with alternative item types (fill-in, point-and-click). No more hand-written essay solutions.",SE Exam
