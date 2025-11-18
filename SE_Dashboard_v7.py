@@ -636,7 +636,7 @@ def display_summary_metrics(filtered_df):
     with col1:
         st.metric("📊 Total Records", f"{len(filtered_df):,}" if filtered_df is not None else "0")
     with col2:
-        st.metric("🗺️ States", filtered_df['State'].nunique() if (filtered_df is not None and 'State' in filtered_df.columns) else 0)
+        st.metric("🗺️ States*", filtered_df['State'].nunique() if (filtered_df is not None and 'State' in filtered_df.columns) else 0)
     with col3:
         if filtered_df is not None and 'Expiration Date' in filtered_df.columns:
             current_date = pd.Timestamp.now()
@@ -650,6 +650,9 @@ def display_summary_metrics(filtered_df):
             st.metric("📅 Year Range", date_range)
         else:
             st.metric("📅 Year Range", "N/A")
+    
+    # Explanatory note for States metric
+    st.caption("*Includes U.S. territories (DC, GU, PR), Armed Forces jurisdictions (AP), and international license holders. Total count may exceed 50 states.")
 
 # ---------- App ----------
 def main():
