@@ -401,34 +401,32 @@ def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_
         ev['bucket'] = ev['start_date'].apply(to_bucket_label)
         ev = ev.dropna(subset=['bucket'])
         if not ev.empty:
-            # Keep labels within chart bounds
+            # Place markers at the bottom of the chart (slightly below 0)
             y_max = max(license_counts.values) if len(license_counts) else 0
-            fig.update_yaxes(range=[0, y_max * 1.15])
-            # Choose colors per type
-            type_colors = {}
-            palette = ['crimson', 'darkorange', 'seagreen', 'mediumpurple', 'teal', 'goldenrod']
-            for i, t in enumerate(ev['type'].astype(str).unique()):
-                type_colors[t] = palette[i % len(palette)]
+            pad = max(1, y_max * 0.06)
+            # Extend y-axis to include a small negative region for markers
+            fig.update_yaxes(range=[-pad * 1.4, y_max * 1.05])
 
-            # Add a single scatter trace grouping all events for legend clarity
+            # Year-only text in red; full details in hover
+            text_year = ev['start_date'].dt.year.astype('Int64').astype(str).fillna('')
+
             fig.add_trace(go.Scatter(
                 x=ev['bucket'],
-                y=[y_max * 1.1] * len(ev),
+                y=[-pad] * len(ev),
                 mode='markers+text',
                 name='Events',
-                marker=dict(
-                    symbol='triangle-up', size=10,
-                    color=[type_colors.get(t, 'gray') for t in ev['type'].astype(str)]
-                ),
-                text=ev['label'].fillna(''),
+                marker=dict(symbol='triangle-up', size=10, color='crimson'),
+                text=text_year,
                 textposition='top center',
+                textfont=dict(color='crimson'),
                 hovertemplate=(
-                    '<b>%{text}</b><br>'
-                    'Date: %{customdata[0]}<br>'
-                    'Type: %{customdata[1]}<br>'
-                    '%{customdata[2]|s}<extra></extra>'
+                    '<b>%{customdata[0]}</b><br>'  # label
+                    'Date: %{customdata[1]}<br>'
+                    'Type: %{customdata[2]}<br>'
+                    '%{customdata[3]|s}<extra></extra>'
                 ),
                 customdata=pd.concat([
+                    ev['label'].fillna(''),
                     ev['start_date'].dt.strftime('%Y-%m-%d'),
                     ev['type'].astype(str),
                     ev['description'].fillna('')
@@ -524,20 +522,56 @@ def plot_time_series_line(filtered_df, bucket_size: str, lock_y: bool = True, ev
 
     # Overlay timeline events as vertical lines on the datetime X axis
     if events_df is not None and not events_df.empty and st.session_state.get('show_events', True):
+        # Create consistent colors by event type
         type_styles = {}
         palette = ['crimson', 'darkorange', 'seagreen', 'mediumpurple', 'teal', 'goldenrod']
         for i, t in enumerate(events_df['type'].astype(str).unique()):
             type_styles[t] = dict(color=palette[i % len(palette)], dash='dot')
 
-        for _, r in events_df.iterrows():
-            color = type_styles.get(str(r.get('type', 'Event')), dict(color='gray'))['color']
-            dash = type_styles.get(str(r.get('type', 'Event')), dict(dash='dot'))['dash']
-            if pd.notna(r['start_date']):
-                fig.add_vline(x=r['start_date'], line=dict(color=color, dash=dash, width=1))
-                if isinstance(r.get('label'), str) and r['label']:
-                    fig.add_annotation(x=r['start_date'], y=max(yvals) if len(yvals) else 0,
-                                       text=r['label'], showarrow=False, yshift=10,
-                                       font=dict(color=color, size=10))
+        # Reserve headroom for year labels
+        y_max = float(pd.Series(yvals).max()) if len(yvals) else 0.0
+        head = max(1.0, y_max * 0.08)
+        fig.update_yaxes(range=[float(pd.Series(yvals).min()) if len(yvals) else 0.0, y_max + head * 1.6])
+
+        # Add vlines and year-only annotations
+        ev = events_df.copy()
+        ev = ev.dropna(subset=['start_date'])
+        if not ev.empty:
+            # Add all invisible markers at a fixed y just above the line to enable hover
+            fig.add_trace(go.Scatter(
+                x=ev['start_date'],
+                y=[y_max + head * 0.8] * len(ev),
+                mode='markers',
+                name='Events',
+                marker=dict(size=12, color='rgba(0,0,0,0)'),
+                hovertemplate=(
+                    '<b>%{customdata[0]}</b><br>'
+                    'Date: %{x|%Y-%m-%d}<br>'
+                    'Type: %{customdata[1]}<br>'
+                    '%{customdata[2]|s}<extra></extra>'
+                ),
+                customdata=pd.concat([
+                    ev['label'].fillna(''),
+                    ev['type'].astype(str),
+                    ev['description'].fillna('')
+                ], axis=1).values,
+                showlegend=False
+            ))
+
+            for _, r in ev.iterrows():
+                t = str(r.get('type', 'Event'))
+                color = type_styles.get(t, dict(color='gray'))['color']
+                dash = type_styles.get(t, dict(dash='dot'))['dash']
+                xdt = r['start_date']
+                fig.add_vline(x=xdt, line=dict(color=color, dash=dash, width=1))
+                # Year-only label in red near the top
+                try:
+                    year_txt = str(pd.to_datetime(xdt).year)
+                except Exception:
+                    year_txt = ''
+                if year_txt:
+                    fig.add_annotation(x=xdt, y=y_max + head * 0.9, text=year_txt,
+                                       showarrow=False, font=dict(color='crimson', size=10))
 
     st.plotly_chart(fig, use_container_width=True)
 
