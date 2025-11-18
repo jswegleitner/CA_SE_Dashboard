@@ -270,7 +270,7 @@ def apply_filters(df, filters):
 
     return filtered_df
 
-def create_visualizations(filtered_df, show_events: bool):
+def create_visualizations(filtered_df, show_events: bool, start_year: Optional[int] = None, end_year: Optional[int] = None):
     if filtered_df is None or filtered_df.empty:
         st.warning("No data to visualize with current filters.")
         return
@@ -286,9 +286,9 @@ def create_visualizations(filtered_df, show_events: bool):
     # Load events (if present)
     events_df = load_timeline_events()
     # Time series
-    plot_time_series(filtered_df, bucket_size, lock_y, events_df=events_df, show_events=show_events)
+    plot_time_series(filtered_df, bucket_size, lock_y, events_df=events_df, show_events=show_events, start_year=start_year, end_year=end_year)
     # Line chart variant
-    plot_time_series_line(filtered_df, bucket_size, lock_y, events_df=events_df, show_events=show_events)
+    plot_time_series_line(filtered_df, bucket_size, lock_y, events_df=events_df, show_events=show_events, start_year=start_year, end_year=end_year)
     st.markdown("---")
 
     # By State
@@ -312,7 +312,7 @@ def create_visualizations(filtered_df, show_events: bool):
         st.markdown("---")
 
 
-def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_df: Optional[pd.DataFrame] = None, show_events: bool = False):
+def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_df: Optional[pd.DataFrame] = None, show_events: bool = False, start_year: Optional[int] = None, end_year: Optional[int] = None):
     if 'Original Issue Date' not in filtered_df.columns or not pd.api.types.is_datetime64_any_dtype(filtered_df['Original Issue Date']):
         st.info("Original Issue Date column not found or not datetime.")
         return
@@ -372,6 +372,10 @@ def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_
     fig.update_xaxes(fixedrange=False)
     fig.update_yaxes(fixedrange=lock_y)
 
+    # Ensure category axis order stays tied to license data only
+    categories = [str(p) for p in license_counts.index]
+    fig.update_xaxes(categoryorder='array', categoryarray=categories)
+
     # Overlay timeline events as markers aligned to the current bucket
     if show_events and (events_df is not None) and (not events_df.empty):
         # Map event start dates to the current bucket label used on x-axis
@@ -391,8 +395,13 @@ def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_
             return None
 
         ev = events_df.copy()
+        # Restrict events to selected year range if provided
+        if start_year is not None and end_year is not None:
+            ev = ev[(ev['start_date'].dt.year >= start_year) & (ev['start_date'].dt.year <= end_year)]
         ev['bucket'] = ev['start_date'].apply(to_bucket_label)
         ev = ev.dropna(subset=['bucket'])
+        # Only keep events whose bucket exists in the data categories so axis isn't extended by events
+        ev = ev[ev['bucket'].isin(categories)]
         if not ev.empty:
             # Place markers at the bottom of the chart (slightly below 0)
             y_max = max(license_counts.values) if len(license_counts) else 0
@@ -416,7 +425,7 @@ def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_
                     '<b>%{customdata[0]}</b><br>'  # label
                     'Date: %{customdata[1]}<br>'
                     'Type: %{customdata[2]}<br>'
-                    '%{customdata[3]|s}<extra></extra>'
+                    '%{customdata[3]}<extra></extra>'
                 ),
                 customdata=pd.concat([
                     ev['label'].fillna(''),
@@ -435,7 +444,7 @@ def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_
         with c3: st.metric("Average per Period", f"{license_counts.mean():.1f}")
 
 
-def plot_time_series_line(filtered_df, bucket_size: str, lock_y: bool = True, events_df: Optional[pd.DataFrame] = None, show_events: bool = False):
+def plot_time_series_line(filtered_df, bucket_size: str, lock_y: bool = True, events_df: Optional[pd.DataFrame] = None, show_events: bool = False, start_year: Optional[int] = None, end_year: Optional[int] = None):
     """
     Line chart of licenses over time. X axis is a datetime representing the start of the
     selected period (year/half/quarter/month) and Y is the number of licenses issued.
@@ -513,6 +522,15 @@ def plot_time_series_line(filtered_df, bucket_size: str, lock_y: bool = True, ev
     fig.update_xaxes(fixedrange=False)
     fig.update_yaxes(fixedrange=lock_y)
 
+    # Constrain X-axis strictly to the filtered license dates (ignore events for autorange)
+    try:
+        x_min = pd.to_datetime(f"{start_year}-01-01") if start_year is not None else df_line['Original Issue Date'].min()
+        x_max = pd.to_datetime(f"{end_year}-12-31") if end_year is not None else df_line['Original Issue Date'].max()
+        if pd.notna(x_min) and pd.notna(x_max):
+            fig.update_xaxes(range=[x_min, x_max])
+    except Exception:
+        pass
+
     # Overlay timeline events as vertical lines on the datetime X axis
     if show_events and (events_df is not None) and (not events_df.empty):
         # Create consistent colors by event type
@@ -529,6 +547,9 @@ def plot_time_series_line(filtered_df, bucket_size: str, lock_y: bool = True, ev
         # Add vlines and year-only annotations
         ev = events_df.copy()
         ev = ev.dropna(subset=['start_date'])
+        # Restrict events to the same visible date range so they don't expand axes
+        if start_year is not None and end_year is not None:
+            ev = ev[(ev['start_date'].dt.year >= start_year) & (ev['start_date'].dt.year <= end_year)]
         if not ev.empty:
             # Add all invisible markers at a fixed y just above the line to enable hover
             fig.add_trace(go.Scatter(
@@ -541,7 +562,7 @@ def plot_time_series_line(filtered_df, bucket_size: str, lock_y: bool = True, ev
                     '<b>%{customdata[0]}</b><br>'
                     'Date: %{x|%Y-%m-%d}<br>'
                     'Type: %{customdata[1]}<br>'
-                    '%{customdata[2]|s}<extra></extra>'
+                    '%{customdata[2]}<extra></extra>'
                 ),
                 customdata=pd.concat([
                     ev['label'].fillna(''),
@@ -926,7 +947,12 @@ def main():
         st.warning("🔍 No records match the selected filters. Try adjusting your filter criteria.")
         return
 
-    create_visualizations(filtered_df, filters.get('show_events', False))
+    create_visualizations(
+        filtered_df,
+        filters.get('show_events', False),
+        filters.get('start_year'),
+        filters.get('end_year')
+    )
 
     # Table
     st.subheader("📋 Filtered Data Table")
