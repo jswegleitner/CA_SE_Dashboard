@@ -205,26 +205,34 @@ def load_timeline_events() -> Optional[pd.DataFrame]:
 
 # ---------- Helpers ----------
 def _wrap_html(text: str, width: int = 100) -> str:
-    """Wrap plain text to a target width and convert newlines to <br> for Plotly hovers."""
+    """Wrap plain text to a target width and preserve line breaks using <br>."""
     if not text:
         return ''
-    # First split on any existing <br> markers so we don’t reflow deliberate breaks
-    parts = str(text).split('<br>')
-    wrapped_parts = [textwrap.fill(p.strip(), width=width, break_long_words=False, break_on_hyphens=False) for p in parts]
-    return '<br>'.join(wrapped_parts).replace('\n', '<br>')
+    s = str(text).replace('\r\n', '\n').replace('\r', '\n')
+    # Treat existing <br> as hard breaks
+    s = s.replace('<br>', '\n')
+    lines = s.split('\n')
+    wrapped = []
+    for ln in lines:
+        ln = ln.strip()
+        if not ln:
+            wrapped.append('')
+            continue
+        wrapped.append(textwrap.fill(ln, width=width, break_long_words=False, break_on_hyphens=False))
+    return '<br>'.join(wrapped)
 
 def format_event_description(desc: str) -> str:
     """Insert line breaks before known field labels and wrap to reasonable width."""
     if desc is None:
         return ''
     s = str(desc)
-    # Add hard breaks before common field labels to create readable blocks
     tokens = [
         'Codes:', 'Format:', 'Breadth:', 'Depth:', 'Notes:', 'Vertical:', 'Lateral:', 'Updated:', 'Components:'
     ]
+    # Insert a newline before tokens wherever they appear (except at the very start)
     for tok in tokens:
-        s = s.replace(f' {tok}', f'<br>{tok}')
-    # Final wrapping for each segment
+        s = re.sub(rf'(?<!^)\s*{re.escape(tok)}', f'\n{tok}', s)
+    # Final wrapping with preserved line breaks
     return _wrap_html(s, width=110)
 
 def build_event_description_from_fields(code: str, fmt: str, notes: str) -> str:
