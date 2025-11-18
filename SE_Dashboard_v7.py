@@ -238,13 +238,12 @@ def format_event_description(desc: str) -> str:
 def build_event_description_from_fields(code: str, fmt: str, notes: str) -> str:
     parts = []
     if code and str(code).strip():
-        parts.append(f"Codes: {code}")
+        parts.append(_wrap_html(f"Codes: {code}", width=85))
     if fmt and str(fmt).strip():
-        parts.append(f"Format: {fmt}")
+        parts.append(_wrap_html(f"Format: {fmt}", width=85))
     if notes and str(notes).strip():
-        parts.append(f"Notes: {notes}")
-    combined = '\n'.join(parts)
-    return format_event_description(combined)
+        parts.append(_wrap_html(f"Notes: {notes}", width=85))
+    return '<br>'.join(parts)
 
 # ---------- Filters & visuals (updated with Plotly) ----------
 def create_filters(df):
