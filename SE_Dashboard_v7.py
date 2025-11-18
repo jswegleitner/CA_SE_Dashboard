@@ -92,7 +92,7 @@ def resolve_data_source(default_local_filename: str):
 
 # ---------- Filters & visuals (updated with Plotly) ----------
 def create_filters(df):
-    st.sidebar.header("≡ƒöì Data Filters")
+    st.sidebar.header("🔍 Data Filters")
     filters = {}
 
     st.sidebar.subheader("State")
@@ -184,7 +184,7 @@ def create_visualizations(filtered_df):
         return
     # High-level visual section: each visual is its own function to make
     # independent editing and testing straightforward.
-    st.subheader("≡ƒôê Licenses Issued Over Time")
+    st.subheader("📈 Licenses Issued Over Time")
 
     col1, _ = st.columns([1, 3])
     with col1:
@@ -280,7 +280,7 @@ def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True):
 
     st.plotly_chart(fig, use_container_width=True)
 
-    with st.expander("≡ƒôè Time Series Statistics"):
+    with st.expander("📊 Time Series Statistics"):
         c1, c2, c3 = st.columns(3)
         with c1: st.metric("Peak Period", str(license_counts.idxmax()))
         with c2: st.metric("Peak Count", int(license_counts.max()))
@@ -369,7 +369,7 @@ def plot_time_series_line(filtered_df, bucket_size: str, lock_y: bool = True):
 
 
 def plot_state_counts(filtered_df):
-    st.subheader("≡ƒù║∩╕Å Licenses by State")
+    st.subheader("🗺️ Licenses by State")
     state_counts = filtered_df['State'].value_counts()
 
     col1, col2 = st.columns([2, 1])
@@ -404,7 +404,7 @@ def plot_state_counts(filtered_df):
 
 
 def plot_status_pie(filtered_df):
-    st.subheader("≡ƒôï License Status Distribution")
+    st.subheader("📋 License Status Distribution")
     c1, c2 = st.columns([1, 1])
     status_counts = filtered_df['License Status'].value_counts()
 
@@ -517,7 +517,7 @@ def plot_us_map(filtered_df):
     ))
 
     fig.update_layout(
-        title_text='≡ƒù║∩╕Å CA SE licenses by Resident State',
+        title_text='🗺️ CA SE licenses by Resident State',
         geo_scope='usa',
         height=600
     )
@@ -621,7 +621,7 @@ def plot_ca_county_map(filtered_df):
     )
 
     fig.update_layout(
-        title_text='≡ƒù║∩╕Å CA SE Licenses by County',
+        title_text='🗺️ CA SE Licenses by County',
         height=600
     )
 
@@ -634,31 +634,31 @@ def plot_ca_county_map(filtered_df):
 def display_summary_metrics(filtered_df):
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("≡ƒôè Total Records", f"{len(filtered_df):,}" if filtered_df is not None else "0")
+        st.metric("📊 Total Records", f"{len(filtered_df):,}" if filtered_df is not None else "0")
     with col2:
-        st.metric("≡ƒù║∩╕Å States", filtered_df['State'].nunique() if (filtered_df is not None and 'State' in filtered_df.columns) else 0)
+        st.metric("🗺️ States", filtered_df['State'].nunique() if (filtered_df is not None and 'State' in filtered_df.columns) else 0)
     with col3:
         if filtered_df is not None and 'Expiration Date' in filtered_df.columns:
             current_date = pd.Timestamp.now()
             active_licenses = len(filtered_df[filtered_df['Expiration Date'] >= current_date])
-            st.metric("Γ£à Active Licenses", f"{active_licenses:,}")
+            st.metric("✅ Active Licenses", f"{active_licenses:,}")
         else:
-            st.metric("Γ£à Active Licenses", "0")
+            st.metric("✅ Active Licenses", "0")
     with col4:
         if filtered_df is not None and 'Original Issue Date' in filtered_df.columns and pd.api.types.is_datetime64_any_dtype(filtered_df['Original Issue Date']):
             date_range = f"{filtered_df['Original Issue Date'].dt.year.min()}-{filtered_df['Original Issue Date'].dt.year.max()}"
-            st.metric("≡ƒôà Year Range", date_range)
+            st.metric("📅 Year Range", date_range)
         else:
-            st.metric("≡ƒôà Year Range", "N/A")
+            st.metric("📅 Year Range", "N/A")
 
 # ---------- App ----------
 def main():
-    st.set_page_config(page_title="SE License Dashboard", page_icon="≡ƒÅù∩╕Å", layout="wide", initial_sidebar_state="expanded")
-    st.title("≡ƒÅù∩╕Å Structural Engineers License Dashboard")
+    st.set_page_config(page_title="SE License Dashboard", page_icon="🏗️", layout="wide", initial_sidebar_state="expanded")
+    st.title("🏗️ Structural Engineers License Dashboard")
     st.markdown("Interactive dashboard for analyzing structural engineer license data")
     st.markdown("---")
 
-    st.sidebar.title("≡ƒôü Data Source")
+    st.sidebar.title("📁 Data Source")
 
     # Default repo-bundled CSV path (without extension, will be added automatically)
     default_csv = "ProfEngrsLandSurvyrsGeologist_Data00.xls_structural_engineers_cleaned"
@@ -699,7 +699,7 @@ def main():
     st.success(f"Γ£à Successfully loaded {len(df):,} Structural Engineer records")
 
     # Show column info for debugging
-    with st.expander("≡ƒôï Data Column Information"):
+    with st.expander("📋 Data Column Information"):
         st.write("**Available columns:**")
         for col in df.columns:
             st.write(f"- `{col}` ({df[col].dtype})")
@@ -713,19 +713,19 @@ def main():
     filtered_df = apply_filters(df, filters)
 
     # Metrics
-    st.subheader("≡ƒôè Summary Metrics")
+    st.subheader("📊 Summary Metrics")
     display_summary_metrics(filtered_df)
     st.markdown("---")
 
     # Visuals
     if filtered_df is None or filtered_df.empty:
-        st.warning("≡ƒöì No records match the selected filters. Try adjusting your filter criteria.")
+        st.warning("🔍 No records match the selected filters. Try adjusting your filter criteria.")
         return
 
     create_visualizations(filtered_df)
 
     # Table
-    st.subheader("≡ƒôï Filtered Data Table")
+    st.subheader("📋 Filtered Data Table")
     if st.checkbox("Show detailed data table", value=False):
         display_df = filtered_df.copy()
         if 'Original Issue Date' in display_df.columns:
@@ -736,12 +736,12 @@ def main():
         st.dataframe(display_df, use_container_width=True, hide_index=True, height=400)
 
     # Downloads
-    st.subheader("≡ƒÆ╛ Export Data")
+    st.subheader("💾 Export Data")
     col1, col2 = st.columns(2)
     with col1:
         csv_data = filtered_df.to_csv(index=False)
         st.download_button(
-            label="≡ƒôÑ Download Filtered Data (CSV)",
+            label="📥 Download Filtered Data (CSV)",
             data=csv_data,
             file_name=f"structural_engineers_filtered_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
             mime="text/csv"
@@ -763,7 +763,7 @@ def main():
         summary_df = pd.DataFrame(summary_data)
         summary_csv = summary_df.to_csv(index=False)
         st.download_button(
-            label="≡ƒôè Download Summary Report (CSV)",
+            label="📊 Download Summary Report (CSV)",
             data=summary_csv,
             file_name=f"dashboard_summary_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
             mime="text/csv"
