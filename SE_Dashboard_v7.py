@@ -671,7 +671,7 @@ def main():
             # Ensure date columns are parsed consistently for the rest of the app
             df = parse_dates(df)
             if df is not None:
-                st.sidebar.success(f"Γ£à Loaded: {Path(src).name}")
+                st.sidebar.success(f"✅ Loaded: {Path(src).name}")
     
     # If no file found automatically, show upload option
     if df is None:
@@ -696,7 +696,7 @@ def main():
         """)
         return
 
-    st.success(f"Γ£à Successfully loaded {len(df):,} Structural Engineer records")
+    st.success(f"✅ Successfully loaded {len(df):,} Structural Engineer records")
 
     # Show column info for debugging
     with st.expander("📋 Data Column Information"):
