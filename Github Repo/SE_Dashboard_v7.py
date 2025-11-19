@@ -563,8 +563,8 @@ def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_
             # Place markers at the bottom of the chart (slightly below 0)
             y_max = max(license_counts.values) if len(license_counts) else 0
             pad = max(1, y_max * 0.06)
-            # Extend y-axis to include a small negative region for markers
-            fig.update_yaxes(range=[-pad * 1.4, y_max * 1.05])
+            # Extend y-axis to include more negative space for markers and text labels
+            fig.update_yaxes(range=[-pad * 2.5, y_max * 1.05])
 
             # Year-only text in red; full details in hover
             text_year = ev['start_date'].dt.year.astype('Int64').astype(str).fillna('')
@@ -583,7 +583,7 @@ def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_
 
             fig.add_trace(go.Scatter(
                 x=ev['bucket'],
-                y=[-pad] * len(ev),
+                y=[-pad * 0.8] * len(ev),
                 mode='markers+text',
                 name='Events',
                 marker=dict(symbol='triangle-up', size=10, color='crimson'),
