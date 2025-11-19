@@ -711,8 +711,10 @@ def plot_time_series_line(filtered_df, bucket_size: str, lock_y: bool = True, ev
 
         # Reserve headroom for year labels
         y_max = float(pd.Series(yvals).max()) if len(yvals) else 0.0
+        y_min = float(pd.Series(yvals).min()) if len(yvals) else 0.0
         head = max(1.0, y_max * 0.08)
-        fig.update_yaxes(range=[float(pd.Series(yvals).min()) if len(yvals) else 0.0, y_max + head * 1.6])
+        # Extend both top and bottom to accommodate labels
+        fig.update_yaxes(range=[y_min - head * 0.5, y_max + head * 2.0])
 
         # Add vlines and year-only annotations
         ev = events_df.copy()
@@ -736,7 +738,7 @@ def plot_time_series_line(filtered_df, bucket_size: str, lock_y: bool = True, ev
 
             fig.add_trace(go.Scatter(
                 x=ev['start_date'],
-                y=[y_max + head * 0.8] * len(ev),
+                y=[y_min - head * 0.3] * len(ev),
                 mode='markers',
                 name='Events',
                 marker=dict(size=12, color='rgba(0,0,0,0)'),
@@ -760,13 +762,13 @@ def plot_time_series_line(filtered_df, bucket_size: str, lock_y: bool = True, ev
                 dash = type_styles.get(t, dict(dash='dot'))['dash']
                 xdt = r['start_date']
                 fig.add_vline(x=xdt, line=dict(color=color, dash=dash, width=1))
-                # Year-only label in red near the top
+                # Year-only label in red at the bottom
                 try:
                     year_txt = str(pd.to_datetime(xdt).year)
                 except Exception:
                     year_txt = ''
                 if year_txt:
-                    fig.add_annotation(x=xdt, y=y_max + head * 0.9, text=year_txt,
+                    fig.add_annotation(x=xdt, y=y_min - head * 0.3, text=year_txt,
                                        showarrow=False, font=dict(color='crimson', size=10))
 
     st.plotly_chart(fig, use_container_width=True)
