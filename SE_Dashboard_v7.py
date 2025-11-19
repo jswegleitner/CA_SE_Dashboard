@@ -204,52 +204,84 @@ def load_timeline_events() -> Optional[pd.DataFrame]:
     return out
 
 # ---------- Helpers ----------
-def _wrap_html(text: str, width: int = 100) -> str:
-    """Wrap plain text to a target width and preserve line breaks using <br>."""
-    if not text:
+def _sanitize_hover(text: str) -> str:
+    """Escape characters that can interfere with Plotly's hover template parsing."""
+    if text is None:
         return ''
-    s = str(text).replace('\r\n', '\n').replace('\r', '\n')
-    # Treat existing <br> as hard breaks
-    s = s.replace('<br>', '\n')
-    lines = s.split('\n')
-    wrapped = []
-    for ln in lines:
-        ln = ln.strip()
-        if not ln:
-            wrapped.append('')
-            continue
-        # Use subsequent_indent for cleaner multi-line wrapping in tooltips
-        wrapped.append(textwrap.fill(
-            ln, 
-            width=width, 
-            break_long_words=False, 
-            break_on_hyphens=False,
-            subsequent_indent='  '
-        ))
-    return '<br>'.join(wrapped)
+    # Escape braces which Plotly might try to interpret
+    return str(text).replace('{', '&#123;').replace('}', '&#125;')
 
-def format_event_description(desc: str) -> str:
-    """Insert line breaks before known field labels and wrap to reasonable width."""
-    if desc is None:
+def _wrap_words(words, width: int, first_prefix: str = '', subsequent_prefix: str = '  ') -> list:
+    """Greedy word wrap returning list of lines with given width constraints."""
+    lines = []
+    current = first_prefix.rstrip()
+    for w in words:
+        w = w.strip()
+        if not w:
+            continue
+        if not current:
+            current = first_prefix.rstrip()
+        tentative = (current + ' ' + w).strip() if current else w
+        if len(tentative) > width and current:
+            lines.append(current)
+            current = f"{subsequent_prefix}{w}".rstrip()
+        else:
+            current = tentative
+    if current:
+        lines.append(current)
+    return lines
+
+def _wrap_field(label: str, content: str, width: int = 55) -> str:
+    """Wrap a single field (label + content) producing <br>-joined lines."""
+    if content is None:
         return ''
-    s = str(desc)
-    tokens = [
-        'Codes:', 'Format:', 'Breadth:', 'Depth:', 'Notes:', 'Vertical:', 'Lateral:', 'Updated:', 'Components:'
-    ]
-    # Insert a newline before tokens wherever they appear (except at the very start)
+    txt = str(content).strip()
+    if not txt:
+        return ''
+    words = txt.replace('\r\n', ' ').replace('\n', ' ').split()
+    lines = _wrap_words(words, width=width, first_prefix=f"{label} ", subsequent_prefix='  ')
+    return '<br>'.join(_sanitize_hover(l) for l in lines)
+
+def _wrap_legacy(raw: str, width: int = 55) -> str:
+    """Wrap a legacy combined description string by detecting tokens and wrapping segments."""
+    if raw is None:
+        return ''
+    s = str(raw).strip()
+    if not s:
+        return ''
+    tokens = ['Codes:', 'Format:', 'Breadth:', 'Depth:', 'Notes:', 'Vertical:', 'Lateral:', 'Updated:', 'Components:']
+    # Ensure each token starts new line for splitting
     for tok in tokens:
         s = re.sub(rf'(?<!^)\s*{re.escape(tok)}', f'\n{tok}', s)
-    # Final wrapping with preserved line breaks - narrower for tooltips
-    return _wrap_html(s, width=70)
+    segments = []
+    for seg in s.split('\n'):
+        seg = seg.strip()
+        if not seg:
+            continue
+        # Find label if present
+        m = re.match(r'^(\w+:)\s*(.*)$', seg)
+        if m:
+            label, content = m.group(1), m.group(2)
+            segments.append(_wrap_field(label, content, width=width))
+        else:
+            # Generic wrapping
+            words = seg.split()
+            lines = _wrap_words(words, width=width, first_prefix='', subsequent_prefix='  ')
+            segments.append('<br>'.join(_sanitize_hover(l) for l in lines))
+    return '<br>'.join(segments)
+
+def format_event_description(desc: str) -> str:
+    """Public interface for wrapping legacy description strings into hover-friendly HTML."""
+    return _wrap_legacy(desc, width=55)
 
 def build_event_description_from_fields(code: str, fmt: str, notes: str) -> str:
     parts = []
     if code and str(code).strip():
-        parts.append(_wrap_html(f"Codes: {code}", width=70))
+        parts.append(_wrap_field('Codes:', code, width=55))
     if fmt and str(fmt).strip():
-        parts.append(_wrap_html(f"Format: {fmt}", width=70))
+        parts.append(_wrap_field('Format:', fmt, width=55))
     if notes and str(notes).strip():
-        parts.append(_wrap_html(f"Notes: {notes}", width=70))
+        parts.append(_wrap_field('Notes:', notes, width=55))
     return '<br>'.join(parts)
 
 # ---------- Filters & visuals (updated with Plotly) ----------
