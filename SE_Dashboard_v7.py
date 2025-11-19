@@ -588,7 +588,7 @@ def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_
                 name='Events',
                 marker=dict(symbol='triangle-up', size=10, color='crimson'),
                 text=text_year,
-                textposition='top center',
+                textposition='bottom center',
                 textfont=dict(color='crimson'),
                 hovertemplate=(
                     '<b>%{customdata[0]}</b><br>'  # label
