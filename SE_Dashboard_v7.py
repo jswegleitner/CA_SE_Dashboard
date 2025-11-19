@@ -268,6 +268,15 @@ def create_filters(df):
         key='state_filter',
         help="Select one or more states. Leave empty to include all states."
     )
+    
+    # Comparison state overlay
+    filters['comparison_state'] = st.sidebar.selectbox(
+        "Compare with State (overlay on bar chart):",
+        options=['None'] + states,
+        index=0,
+        key='comparison_state',
+        help="Select a single state to overlay its data on the time series bar chart"
+    )
 
     st.sidebar.subheader("License Status")
     statuses = sorted(df['License Status'].dropna().unique().tolist()) if 'License Status' in df.columns else []
@@ -346,7 +355,7 @@ def apply_filters(df, filters):
 
     return filtered_df
 
-def create_visualizations(filtered_df, show_events: bool, start_year: Optional[int] = None, end_year: Optional[int] = None):
+def create_visualizations(filtered_df, show_events: bool, start_year: Optional[int] = None, end_year: Optional[int] = None, comparison_state: str = None, full_df = None):
     if filtered_df is None or filtered_df.empty:
         st.warning("No data to visualize with current filters.")
         return
@@ -362,7 +371,7 @@ def create_visualizations(filtered_df, show_events: bool, start_year: Optional[i
     # Load events (if present)
     events_df = load_timeline_events()
     # Time series
-    plot_time_series(filtered_df, bucket_size, lock_y, events_df=events_df, show_events=show_events, start_year=start_year, end_year=end_year)
+    plot_time_series(filtered_df, bucket_size, lock_y, events_df=events_df, show_events=show_events, start_year=start_year, end_year=end_year, comparison_state=comparison_state, full_df=full_df)
     # Line chart variant
     plot_time_series_line(filtered_df, bucket_size, lock_y, events_df=events_df, show_events=show_events, start_year=start_year, end_year=end_year)
     st.markdown("---")
@@ -388,7 +397,7 @@ def create_visualizations(filtered_df, show_events: bool, start_year: Optional[i
         st.markdown("---")
 
 
-def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_df: Optional[pd.DataFrame] = None, show_events: bool = False, start_year: Optional[int] = None, end_year: Optional[int] = None):
+def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_df: Optional[pd.DataFrame] = None, show_events: bool = False, start_year: Optional[int] = None, end_year: Optional[int] = None, comparison_state: str = None, full_df = None):
     if 'Original Issue Date' not in filtered_df.columns or not pd.api.types.is_datetime64_any_dtype(filtered_df['Original Issue Date']):
         st.info("Original Issue Date column not found or not datetime.")
         return
@@ -454,22 +463,60 @@ def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_
     fig.add_trace(go.Bar(
         x=[str(p) for p in license_counts.index],
         y=license_counts.values,
-        name='Licenses Issued',
+        name='Main Data',
         marker_color='steelblue',
         text=license_counts.values,
         textposition='outside',
         hovertemplate='<b>Period:</b> %{x}<br><b>Licenses:</b> %{y}<extra></extra>'
     ))
+    
+    # Add comparison state overlay if selected
+    if comparison_state and comparison_state != 'None' and full_df is not None:
+        comp_df = full_df[full_df['State'] == comparison_state].copy()
+        # Apply same date filters as main data
+        if start_year is not None and end_year is not None:
+            comp_df = comp_df[
+                (comp_df['Original Issue Date'].dt.year >= start_year) &
+                (comp_df['Original Issue Date'].dt.year <= end_year)
+            ]
+        
+        # Apply same bucketing logic
+        if bucket_size == "Yearly":
+            comp_df['Period'] = comp_df['Original Issue Date'].dt.to_period('Y')
+        elif bucket_size == "Half-Yearly":
+            comp_df['Year'] = comp_df['Original Issue Date'].dt.year
+            comp_df['Half'] = ((comp_df['Original Issue Date'].dt.month - 1) // 6) + 1
+            comp_df['Period'] = comp_df['Year'].astype(str) + '-H' + comp_df['Half'].astype(str)
+        elif bucket_size == "Monthly":
+            comp_df['Period'] = comp_df['Original Issue Date'].dt.to_period('M')
+        else:  # Quarterly
+            comp_df['Period'] = comp_df['Original Issue Date'].dt.to_period('Q')
+        
+        # Reindex to match main data categories with zeros
+        comp_counts = comp_df.groupby('Period').size()
+        comp_counts = comp_counts.reindex(license_counts.index, fill_value=0)
+        
+        fig.add_trace(go.Bar(
+            x=[str(p) for p in comp_counts.index],
+            y=comp_counts.values,
+            name=f'{comparison_state} (Comparison)',
+            marker_color='coral',
+            text=comp_counts.values,
+            textposition='outside',
+            opacity=0.7,
+            hovertemplate=f'<b>Period:</b> %{{x}}<br><b>{comparison_state} Licenses:</b> %{{y}}<extra></extra>'
+        ))
 
     fig.update_layout(
         title=f"Structural Engineer Licenses Issued Over Time ({title_period})",
         xaxis_title="Period",
         yaxis_title="Number of Licenses",
-        showlegend=False,
+        showlegend=True if (comparison_state and comparison_state != 'None') else False,
         height=500,
         hovermode='x unified',
         dragmode='zoom',
-        hoverlabel=dict(align='left')
+        hoverlabel=dict(align='left'),
+        barmode='group'
     )
 
     num_periods = len(license_counts)
@@ -1070,6 +1117,7 @@ def main():
 
     # Filters
     filters = create_filters(df)
+    full_df = df.copy()  # Keep unfiltered copy for comparison overlay
     filtered_df = apply_filters(df, filters)
 
     # Metrics
@@ -1086,7 +1134,9 @@ def main():
         filtered_df,
         filters.get('show_events', False),
         filters.get('start_year'),
-        filters.get('end_year')
+        filters.get('end_year'),
+        filters.get('comparison_state'),
+        full_df
     )
 
     # Table
