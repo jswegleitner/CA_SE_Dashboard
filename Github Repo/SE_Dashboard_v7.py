@@ -218,7 +218,14 @@ def _wrap_html(text: str, width: int = 100) -> str:
         if not ln:
             wrapped.append('')
             continue
-        wrapped.append(textwrap.fill(ln, width=width, break_long_words=False, break_on_hyphens=False))
+        # Use subsequent_indent for cleaner multi-line wrapping in tooltips
+        wrapped.append(textwrap.fill(
+            ln, 
+            width=width, 
+            break_long_words=False, 
+            break_on_hyphens=False,
+            subsequent_indent='  '
+        ))
     return '<br>'.join(wrapped)
 
 def format_event_description(desc: str) -> str:
@@ -232,17 +239,17 @@ def format_event_description(desc: str) -> str:
     # Insert a newline before tokens wherever they appear (except at the very start)
     for tok in tokens:
         s = re.sub(rf'(?<!^)\s*{re.escape(tok)}', f'\n{tok}', s)
-    # Final wrapping with preserved line breaks
-    return _wrap_html(s, width=110)
+    # Final wrapping with preserved line breaks - narrower for tooltips
+    return _wrap_html(s, width=70)
 
 def build_event_description_from_fields(code: str, fmt: str, notes: str) -> str:
     parts = []
     if code and str(code).strip():
-        parts.append(_wrap_html(f"Codes: {code}", width=85))
+        parts.append(_wrap_html(f"Codes: {code}", width=70))
     if fmt and str(fmt).strip():
-        parts.append(_wrap_html(f"Format: {fmt}", width=85))
+        parts.append(_wrap_html(f"Format: {fmt}", width=70))
     if notes and str(notes).strip():
-        parts.append(_wrap_html(f"Notes: {notes}", width=85))
+        parts.append(_wrap_html(f"Notes: {notes}", width=70))
     return '<br>'.join(parts)
 
 # ---------- Filters & visuals (updated with Plotly) ----------
