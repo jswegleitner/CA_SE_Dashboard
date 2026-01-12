@@ -73,15 +73,12 @@ def resolve_data_source(default_local_filename: str):
         default_local_filename,
         default_local_filename + ".csv",
         "structural_engineers_cleaned.csv",
-        "ProfEngrsLandSurvyrsGeologist_Data00.csv"
+        "ProfEngrsLandSurvyrsGeologist_Data00.csv",
+        "ProfEngrsLandSurvyrsGeologist_Data00_structural_engineers_cleaned.csv"
     ]
-    
-    current_dir = Path.cwd()
-    
-    for filename in possible_files:
-        local_csv_path = current_dir / filename
-        if local_csv_path.exists():
-            return str(local_csv_path)
+
+    # Use script directory for more reliable path resolution on Streamlit Cloud
+    current_dir = Path(__file__).parent if '__file__' in globals() else Path.cwd()
     
     # Also check for any CSV files in the current directory
     csv_files = list(current_dir.glob("*.csv"))
@@ -122,10 +119,11 @@ def load_timeline_events() -> Optional[pd.DataFrame]:
 
     # Fallbacks in repo
     if df is None:
+        # Use script directory for reliable path resolution
+        script_dir = Path(__file__).parent if '__file__' in globals() else Path.cwd()
         for candidate in [
-            Path.cwd() / 'timeline_events.csv',
-            Path.cwd() / 'data' / 'timeline_events.csv',
-            Path.cwd() / 'Github Repo' / 'timeline_events.csv',  # fallback for repo layout
+            script_dir / 'timeline_events.csv',
+            script_dir / 'data' / 'timeline_events.csv',
         ]:
             if candidate.exists():
                 try:
