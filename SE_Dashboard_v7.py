@@ -1149,8 +1149,16 @@ def main():
         st.write("**Available columns:**")
         for col in df.columns:
             st.write(f"- `{col}` ({df[col].dtype})")
+
+        st.write(f"\n**Data shape:** {df.shape[0]} rows × {df.shape[1]} columns")
         
-        st.write(f"\n**Data shape:** {df.shape[0]} rows ├ù {df.shape[1]} columns")
+        # Debug: Show sample data to verify loading
+        if 'State' in df.columns:
+            unique_states = sorted(df['State'].dropna().unique().tolist())
+            st.write(f"\n**Unique States ({len(unique_states)}):** {', '.join(unique_states[:10])}" + 
+                    (f" + {len(unique_states)-10} more" if len(unique_states) > 10 else ""))
+        if 'License Status' in df.columns:
+            st.write(f"**License Statuses:** {', '.join(df['License Status'].dropna().unique().tolist())}")
 
     # (file information expander removed by user request)
 
