@@ -7,8 +7,8 @@ Created on Fri Sep 12 19:59:58 2025
 @author: jwegleitner
 
 Use these commands in the terminal to run the app locally:
-    Opens browser: & 'C:/Users/jwegleitner/Miniforge3/python.exe' -m streamlit run .\SE_Dashboard_v7.py
-    Run headless (no browser): & 'C:/Users/jwegleitner/Miniforge3/python.exe' -m streamlit run .\SE_Dashboard_v7.py --server.headless true
+    Opens browser: & 'C:/Users/jwegleitner/Miniforge3/python.exe' -m streamlit run ./SE_Dashboard_v7.py
+    Run headless (no browser): & 'C:/Users/jwegleitner/Miniforge3/python.exe' -m streamlit run ./SE_Dashboard_v7.py --server.headless true
 
 
 """
@@ -99,6 +99,14 @@ def resolve_data_source(default_local_filename: str):
                 return str(csv_path)
         except Exception:
             continue
+
+# ---------- Optional timeline events (for chart annotations) ----------
+@st.cache_data
+def load_timeline_events() -> Optional[pd.DataFrame]:
+    """
+    Load optional timeline events used to annotate time-series charts.
+    Supported locations (in priority order):
+    - st.secrets['EVENTS_PATH'] or st.secrets['EVENTS_URL']
     - ./timeline_events.csv
     - ./data/timeline_events.csv
 
@@ -1152,16 +1160,8 @@ def main():
         st.write("**Available columns:**")
         for col in df.columns:
             st.write(f"- `{col}` ({df[col].dtype})")
-
-        st.write(f"\n**Data shape:** {df.shape[0]} rows × {df.shape[1]} columns")
         
-        # Debug: Show sample data to verify loading
-        if 'State' in df.columns:
-            unique_states = sorted(df['State'].dropna().unique().tolist())
-            st.write(f"\n**Unique States ({len(unique_states)}):** {', '.join(unique_states[:10])}" + 
-                    (f" + {len(unique_states)-10} more" if len(unique_states) > 10 else ""))
-        if 'License Status' in df.columns:
-            st.write(f"**License Statuses:** {', '.join(df['License Status'].dropna().unique().tolist())}")
+        st.write(f"\n**Data shape:** {df.shape[0]} rows ├ù {df.shape[1]} columns")
 
     # (file information expander removed by user request)
 
