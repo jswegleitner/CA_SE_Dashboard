@@ -1,9 +1,18 @@
-# Ignore everything in the root
-*
+﻿# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+dist/
+build/
 
-# But don't ignore the Github Repo folder and its contents
-!Github Repo/
-!Github Repo/**
+# Data files
+*.xlsx
+SE_Exam_Requirements_by_State.xlsx
 
-# Don't ignore this .gitignore file
-!.gitignore
+# Folders to ignore
+Archived/
+CA DCA downloads/
+Github Repo/
+Offline Processing/
+Other States Data/
