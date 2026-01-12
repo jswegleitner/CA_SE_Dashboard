@@ -80,22 +80,25 @@ def resolve_data_source(default_local_filename: str):
     # Use script directory for more reliable path resolution on Streamlit Cloud
     current_dir = Path(__file__).parent if '__file__' in globals() else Path.cwd()
     
-    # Also check for any CSV files in the current directory
+    # First try the specific filenames we know
+    for filename in possible_files:
+        local_csv_path = current_dir / filename
+        if local_csv_path.exists():
+            return str(local_csv_path)
+
+    # Look for CSV files with required license columns (not timeline or other data)
     csv_files = list(current_dir.glob("*.csv"))
-    if csv_files:
-        st.sidebar.info(f"Found CSV files: {[f.name for f in csv_files]}")
-        return str(csv_files[0])  # Use the first CSV file found
-    
-    return None
-
-
-# ---------- Optional timeline events (for chart annotations) ----------
-@st.cache_data
-def load_timeline_events() -> Optional[pd.DataFrame]:
-    """
-    Load optional timeline events used to annotate time-series charts.
-    Supported locations (in priority order):
-    - st.secrets['EVENTS_PATH'] or st.secrets['EVENTS_URL']
+    for csv_path in csv_files:
+        # Skip known non-license files
+        if csv_path.name.lower() in ['timeline_events.csv', 'license history table.csv']:
+            continue
+        # Check if it has license data columns
+        try:
+            sample_df = pd.read_csv(csv_path, nrows=1)
+            if 'License Type' in sample_df.columns or 'License Number' in sample_df.columns:
+                return str(csv_path)
+        except Exception:
+            continue
     - ./timeline_events.csv
     - ./data/timeline_events.csv
 
