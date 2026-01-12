@@ -1,7 +1,7 @@
 ﻿Year,Event / Format Update,Building Code Reference,Question Format,Notes
 1931,California establishes Structural Engineer (SE) title act.,N/A,Essay/oral examination,California becomes the first state to create a distinct SE license under the Civil Engineers Act.
 1957,California Professional Engineers Act separates CE and SE practice scopes.,N/A,Essay-based problems,Structural Engineers are required for complex structures; aligns with state seismic design focus.
-1980s,California adds Seismic Principles Exam to Civil licensure.,"UBC (edition varies by year), AISC ASD, ACI 318",Multiple choice + essay,Ensures all CEs demonstrate basic earthquake engineering knowledge before SE specialization. Specific code editions not well-documented.
+1988,California adds Seismic Principles Exam to Civil licensure.,"UBC (edition varies by year), AISC ASD, ACI 318",Multiple choice + essay,Ensures all CEs demonstrate basic earthquake engineering knowledge before SE specialization. Specific code editions not well-documented.
 1997,NCEES introduces Structural I and Structural II exams.,"UBC 1994/1997, AISC ASD 9th Ed, ACI 318, NDS (wood)","SE I: Multiple choice
 SE II: Essay problems","Two-tier national exam system; Structural II recognized by California for SE comity applicants. SE I was 4 hours, SE II was 8 hours. Design primarily used Allowable Stress Design (ASD) methods."
 2000,Exam content updated.,"1997 UBC, SEAOC Blue Book (1996), ASCE 7-95","SE I: Multiple choice
@@ -22,4 +22,3 @@ Depth: Essay problems (4-6 per section)",Revisions aligned with adoption of upda
 Depth: Essay problems (4-6 per section)","Last administration before transition to computer-based testing (CBT). Required physical reference materials (books, codes)."
 2024,NCEES transitions SE exam to CBT format (April 2024).,"IBC 2018, ASCE 7-16, ACI 318-14","Breadth: 55 multiple choice (45 scored, 10 pretest)
 Depth: 60 questions (40 scored, 20 pretest) in 5 scenarios","Four separate modules: Vertical Breadth (6 hrs), Vertical Depth (5.5 hrs), Lateral Breadth (6 hrs), Lateral Depth (5.5 hrs). Total exam time is 23 hours across 4 tests. Breadth sections administered year-round; depth sections twice per year (April/October). Digital reference handbook provided. Depth sections are scenario-based with alternative item types (fill-in, point-and-click). No more hand-written essay solutions."
-,,,,
