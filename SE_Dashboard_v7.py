@@ -1191,48 +1191,15 @@ def main():
 
     # Table
     st.subheader("📋 Filtered Data Table")
-    if st.checkbox("Show detailed data table", value=False):
-        display_df = filtered_df.copy()
-        if 'Original Issue Date' in display_df.columns:
-            display_df['Original Issue Date'] = pd.to_datetime(display_df['Original Issue Date'], errors='coerce').dt.strftime('%Y-%m-%d')
-        if 'Expiration Date' in display_df.columns:
-            display_df['Expiration Date'] = pd.to_datetime(display_df['Expiration Date'], errors='coerce').dt.strftime('%Y-%m-%d')
-        display_df = display_df.sort_values('Original Issue Date', ascending=False, na_position='last')
-        st.dataframe(display_df, use_container_width=True, hide_index=True, height=400)
+    display_df = filtered_df.copy()
+    if 'Original Issue Date' in display_df.columns:
+        display_df['Original Issue Date'] = pd.to_datetime(display_df['Original Issue Date'], errors='coerce').dt.strftime('%Y-%m-%d')
+    if 'Expiration Date' in display_df.columns:
+        display_df['Expiration Date'] = pd.to_datetime(display_df['Expiration Date'], errors='coerce').dt.strftime('%Y-%m-%d')
+    display_df = display_df.sort_values('Original Issue Date', ascending=False, na_position='last')
+    st.dataframe(display_df, use_container_width=True, hide_index=True, height=400)
 
-    # Downloads
-    st.subheader("💾 Export Data")
-    col1, col2 = st.columns(2)
-    with col1:
-        csv_data = filtered_df.to_csv(index=False)
-        st.download_button(
-            label="📥 Download Filtered Data (CSV)",
-            data=csv_data,
-            file_name=f"structural_engineers_filtered_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
-            mime="text/csv"
-        )
-    with col2:
-        summary_data = {
-            'Metric': ['Total Records', 'States', 'Active Licenses', 'Date Range', 'Filters Applied'],
-            'Value': [
-                len(filtered_df),
-                filtered_df['State'].nunique() if 'State' in filtered_df.columns else 0,
-                len(filtered_df[filtered_df['Expiration Date'] >= pd.Timestamp.now()]) if 'Expiration Date' in filtered_df.columns else 0,
-                f"{filtered_df['Original Issue Date'].dt.year.min()}-{filtered_df['Original Issue Date'].dt.year.max()}" if 'Original Issue Date' in filtered_df.columns else "N/A",
-                f"States: {len(filters['states']) if filters['states'] else 'All'}, "
-                f"Statuses: {len(filters['statuses']) if filters['statuses'] else 'All'}, "
-                f"Years: {filters['start_year']}-{filters['end_year']}, "
-                f"Expiration: {len(filters['expiration_types']) if filters['expiration_types'] else 'All'}"
-            ]
-        }
-        summary_df = pd.DataFrame(summary_data)
-        summary_csv = summary_df.to_csv(index=False)
-        st.download_button(
-            label="📊 Download Summary Report (CSV)",
-            data=summary_csv,
-            file_name=f"dashboard_summary_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
-            mime="text/csv"
-        )
+    # ...export data section removed as requested...
 
 if __name__ == "__main__":
     main()
