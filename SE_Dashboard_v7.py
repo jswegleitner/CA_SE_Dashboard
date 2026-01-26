@@ -1190,14 +1190,7 @@ def main():
     )
 
     # Table
-    st.subheader("📋 Filtered Data Table")
-    display_df = filtered_df.copy()
-    if 'Original Issue Date' in display_df.columns:
-        display_df['Original Issue Date'] = pd.to_datetime(display_df['Original Issue Date'], errors='coerce').dt.strftime('%Y-%m-%d')
-    if 'Expiration Date' in display_df.columns:
-        display_df['Expiration Date'] = pd.to_datetime(display_df['Expiration Date'], errors='coerce').dt.strftime('%Y-%m-%d')
-    display_df = display_df.sort_values('Original Issue Date', ascending=False, na_position='last')
-    st.dataframe(display_df, use_container_width=True, hide_index=True, height=400)
+    # ...filtered data table section removed as requested...
 
     # ...export data section removed as requested...
 
