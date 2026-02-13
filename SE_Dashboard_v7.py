@@ -6,18 +6,15 @@ Loads pre-processed CSV data and creates interactive dashboard
 Created on Fri Sep 12 19:59:58 2025
 @author: jwegleitner
 
-Use these commands in the terminal to run the app locally:
-    Opens browser: & 'C:/Users/jwegleitner/Miniforge3/python.exe' -m streamlit run ./SE_Dashboard_v7.py
-    Run headless (no browser): & 'C:/Users/jwegleitner/Miniforge3/python.exe' -m streamlit run ./SE_Dashboard_v7.py --server.headless true
-
-
+Usage:
+    streamlit run SE_Dashboard_v7.py
+    streamlit run SE_Dashboard_v7.py --server.headless true
 """
 from pathlib import Path
 import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
 import re
-import textwrap
 from typing import Optional
 
 # ---------- Data loading ----------
@@ -99,6 +96,8 @@ def resolve_data_source(default_local_filename: str):
                 return str(csv_path)
         except Exception:
             continue
+
+    return None
 
 # ---------- Optional timeline events (for chart annotations) ----------
 @st.cache_data
@@ -194,11 +193,10 @@ def load_timeline_events() -> Optional[pd.DataFrame]:
         out['description'] = desc_series
         # Quick token extraction for code/format/notes within single description text
         def extract_token(s: str, token: str):
-            import re as _re
             if not isinstance(s, str):
                 return ''
             # Capture text after token label until next token or end
-            pattern = _re.compile(rf"{token}\s*(.*?)(?:(?:\n|\r)\s*(Codes:|Format:|Notes:)|$)", _re.IGNORECASE | _re.DOTALL)
+            pattern = re.compile(rf"{token}\s*(.*?)(?:(?:\n|\r)\s*(Codes:|Format:|Notes:)|$)", re.IGNORECASE | re.DOTALL)
             m = pattern.search(s)
             if not m:
                 return ''
@@ -445,63 +443,57 @@ def create_visualizations(filtered_df, show_events: bool, start_year: Optional[i
         st.markdown("---")
 
 
+def _assign_period(df, bucket_size: str):
+    """Assign a 'Period' column to df based on the selected bucket size. Returns the modified df."""
+    if bucket_size == "Yearly":
+        df['Period'] = df['Original Issue Date'].dt.to_period('Y')
+    elif bucket_size == "Half-Yearly":
+        df['Year'] = df['Original Issue Date'].dt.year
+        df['Half'] = ((df['Original Issue Date'].dt.month - 1) // 6) + 1
+        df['Period'] = df['Year'].astype(str) + '-H' + df['Half'].astype(str)
+    elif bucket_size == "Monthly":
+        df['Period'] = df['Original Issue Date'].dt.to_period('M')
+    else:  # Quarterly
+        df['Period'] = df['Original Issue Date'].dt.to_period('Q')
+    return df
+
+
+def _build_full_index(bucket_size: str, start_year: Optional[int], end_year: Optional[int]):
+    """Build a full period index to fill empty buckets, or None if years not specified."""
+    if start_year is None or end_year is None:
+        return None
+    start = f"{int(start_year)}-01-01"
+    end = f"{int(end_year)}-12-31"
+    if bucket_size == "Yearly":
+        return pd.period_range(start=start, end=end, freq='Y')
+    elif bucket_size == "Monthly":
+        return pd.period_range(start=start, end=end, freq='M')
+    elif bucket_size == "Half-Yearly":
+        labels = []
+        for y in range(int(start_year), int(end_year) + 1):
+            labels.append(f"{y}-H1")
+            labels.append(f"{y}-H2")
+        return labels
+    else:  # Quarterly
+        return pd.period_range(start=start, end=end, freq='Q')
+
+
+def _count_by_period(df, bucket_size: str, start_year: Optional[int], end_year: Optional[int]):
+    """Assign periods, group, reindex to fill gaps, and return sorted counts."""
+    df = _assign_period(df.copy(), bucket_size)
+    counts = df.groupby('Period').size()
+    full_index = _build_full_index(bucket_size, start_year, end_year)
+    if full_index is not None:
+        counts = counts.reindex(full_index, fill_value=0)
+    return counts.sort_index()
+
+
 def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_df: Optional[pd.DataFrame] = None, show_events: bool = False, start_year: Optional[int] = None, end_year: Optional[int] = None, comparison_state: str = None, full_df = None):
     if 'Original Issue Date' not in filtered_df.columns or not pd.api.types.is_datetime64_any_dtype(filtered_df['Original Issue Date']):
         st.info("Original Issue Date column not found or not datetime.")
         return
 
-    df_viz = filtered_df.copy()
-    if bucket_size == "Yearly":
-        df_viz['Period'] = df_viz['Original Issue Date'].dt.to_period('Y')
-        title_period = "Yearly"
-    elif bucket_size == "Half-Yearly":
-        df_viz['Year'] = df_viz['Original Issue Date'].dt.year
-        df_viz['Half'] = ((df_viz['Original Issue Date'].dt.month - 1) // 6) + 1
-        df_viz['Period'] = df_viz['Year'].astype(str) + '-H' + df_viz['Half'].astype(str)
-        title_period = "Half-Yearly"
-    else:
-        df_viz['Period'] = df_viz['Original Issue Date'].dt.to_period('Q')
-        title_period = "Quarterly"
-
-    if bucket_size == "Monthly":
-        # Overwrite Period for monthly grouping if requested
-        df_viz['Period'] = df_viz['Original Issue Date'].dt.to_period('M')
-        title_period = "Monthly"
-
-    # Build full period range to include empty buckets (e.g., ensure 1980 appears even if zero)
-    if bucket_size == "Yearly":
-        full_index = None
-        if start_year is not None and end_year is not None:
-            full_index = pd.period_range(start=f"{int(start_year)}-01-01", end=f"{int(end_year)}-12-31", freq='Y')
-        license_counts = df_viz.groupby('Period').size()
-        if full_index is not None:
-            license_counts = license_counts.reindex(full_index, fill_value=0)
-        license_counts = license_counts.sort_index()
-    elif bucket_size == "Monthly":
-        full_index = None
-        if start_year is not None and end_year is not None:
-            full_index = pd.period_range(start=f"{int(start_year)}-01-01", end=f"{int(end_year)}-12-31", freq='M')
-        license_counts = df_viz.groupby('Period').size()
-        if full_index is not None:
-            license_counts = license_counts.reindex(full_index, fill_value=0)
-        license_counts = license_counts.sort_index()
-    elif bucket_size == "Half-Yearly":
-        license_counts = df_viz.groupby('Period').size()
-        if start_year is not None and end_year is not None:
-            labels = []
-            for y in range(int(start_year), int(end_year) + 1):
-                labels.append(f"{y}-H1")
-                labels.append(f"{y}-H2")
-            license_counts = license_counts.reindex(labels, fill_value=0)
-        license_counts = license_counts.sort_index()
-    else:  # Quarterly
-        full_index = None
-        if start_year is not None and end_year is not None:
-            full_index = pd.period_range(start=f"{int(start_year)}-01-01", end=f"{int(end_year)}-12-31", freq='Q')
-        license_counts = df_viz.groupby('Period').size()
-        if full_index is not None:
-            license_counts = license_counts.reindex(full_index, fill_value=0)
-        license_counts = license_counts.sort_index()
+    license_counts = _count_by_period(filtered_df, bucket_size, start_year, end_year)
 
     if license_counts.empty:
         st.info("No time-series data for the selected filters.")
@@ -517,31 +509,17 @@ def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_
         textposition='outside',
         hovertemplate='<b>Period:</b> %{x}<br><b>Licenses:</b> %{y}<extra></extra>'
     ))
-    
+
     # Add comparison state overlay if selected
     if comparison_state and comparison_state != 'None' and full_df is not None:
         comp_df = full_df[full_df['State'] == comparison_state].copy()
-        # Apply same date filters as main data
         if start_year is not None and end_year is not None:
             comp_df = comp_df[
                 (comp_df['Original Issue Date'].dt.year >= start_year) &
                 (comp_df['Original Issue Date'].dt.year <= end_year)
             ]
-        
-        # Apply same bucketing logic
-        if bucket_size == "Yearly":
-            comp_df['Period'] = comp_df['Original Issue Date'].dt.to_period('Y')
-        elif bucket_size == "Half-Yearly":
-            comp_df['Year'] = comp_df['Original Issue Date'].dt.year
-            comp_df['Half'] = ((comp_df['Original Issue Date'].dt.month - 1) // 6) + 1
-            comp_df['Period'] = comp_df['Year'].astype(str) + '-H' + comp_df['Half'].astype(str)
-        elif bucket_size == "Monthly":
-            comp_df['Period'] = comp_df['Original Issue Date'].dt.to_period('M')
-        else:  # Quarterly
-            comp_df['Period'] = comp_df['Original Issue Date'].dt.to_period('Q')
-        
-        # Reindex to match main data categories with zeros
-        comp_counts = comp_df.groupby('Period').size()
+
+        comp_counts = _count_by_period(comp_df, bucket_size, start_year, end_year)
         comp_counts = comp_counts.reindex(license_counts.index, fill_value=0)
         
         fig.add_trace(go.Bar(
@@ -556,7 +534,7 @@ def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_
         ))
 
     fig.update_layout(
-        title=f"Structural Engineer Licenses Issued Over Time ({title_period})",
+        title=f"Structural Engineer Licenses Issued Over Time ({bucket_size})",
         xaxis_title="Period",
         yaxis_title="Number of Licenses",
         showlegend=True if (comparison_state and comparison_state != 'None') else False,
@@ -680,25 +658,14 @@ def plot_time_series_line(filtered_df, bucket_size: str, lock_y: bool = True, ev
         st.info("No time-series data for the selected filters.")
         return
 
-    # Prefer plotting the actual license number field (if present) on Y vs the date on X.
-    # Look for common license-number-like column names.
-    def find_license_column(columns):
-        patterns = [
-            r'license.*num', r'licen[s|c]e.*num', r'lic.*num', r'licenseid', r'license.*id',
-            r'licno', r'licence', r'registration.*num', r'regnum', r'license#', r'lic#'
-        ]
-        for col in columns:
-            name = re.sub(r'[^a-z0-9]', '', col.lower())
-            for pat in patterns:
-                if re.search(pat, name):
-                    return col
-        # fallback common exact matches
-        for col in columns:
-            if col.lower() in ('license number', 'license_number', 'licensenumber', 'license no', 'license no.','license'):
-                return col
-        return None
-
-    license_col = find_license_column(df_line.columns)
+    # Prefer plotting the actual license number field on Y vs the date on X.
+    license_col = None
+    for col in df_line.columns:
+        if col.lower().replace('_', ' ').strip() in (
+            'license number', 'license no', 'license no.', 'licensenumber'
+        ):
+            license_col = col
+            break
     if license_col:
         yvals = pd.to_numeric(df_line[license_col], errors='coerce')
         # If values are non-numeric, warn and fall back to cumulative index
@@ -1161,7 +1128,7 @@ def main():
         for col in df.columns:
             st.write(f"- `{col}` ({df[col].dtype})")
         
-        st.write(f"\n**Data shape:** {df.shape[0]} rows ├ù {df.shape[1]} columns")
+        st.write(f"\n**Data shape:** {df.shape[0]} rows x {df.shape[1]} columns")
 
     # (file information expander removed by user request)
 

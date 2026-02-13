@@ -6,40 +6,35 @@ Complete automation pipeline for downloading, processing, and visualizing Califo
 
 This pipeline consists of 4 main components:
 
-1. **Data Downloader** (`License_List_Claude_v3.py`) - Downloads .xls files from the DCA website
-2. **Data Processor** (`SE_Data_Process_V1.py`) - Handles corrupted files and cleans data
+1. **Data Downloader** (`Offline Processing/License_List_Claude_v3.py`) - Downloads .xls files from the DCA website
+2. **Data Processor** (`Offline Processing/SE_Data_Process_V9.py`) - Handles corrupted files and cleans data
 3. **Dashboard** (`SE_Dashboard_v7.py`) - Interactive Streamlit dashboard
-4. **Pipeline Coordinator** (`pipeline_coordinator.py`) - Runs all scripts in sequence
+4. **Pipeline Coordinator** (`Offline Processing/pipeline_coordinator.py`) - Runs all scripts in sequence
 
 ## Quick Start
 
-### Option 1: Automated (Recommended)
-1. Double-click `run_pipeline.bat` (Windows) or `./run_pipeline.sh` (Linux/Mac)
-2. Follow the prompts
-3. Dashboard will open in your browser automatically
-
-### Option 2: Manual Steps
+### Option 1: Manual Steps
 ```bash
 # 1. Download data
-python License_List_Claude_v3.py
+python "Offline Processing/License_List_Claude_v3.py"
 
 # 2. Process data (handles corrupted .xls files)
-python SE_Data_Process_V1.py
+python "Offline Processing/SE_Data_Process_V9.py"
 
-# 3. Launch dashboard  
+# 3. Launch dashboard
 streamlit run SE_Dashboard_v7.py
 ```
 
-### Option 3: Coordinator Script
+### Option 2: Coordinator Script
 ```bash
-python pipeline_coordinator.py
+python "Offline Processing/pipeline_coordinator.py"
 ```
 
 ## Requirements
 
 ### Python Packages
 ```bash
-pip install pandas streamlit plotly selenium xlrd openpyxl
+pip install -r requirements.txt
 ```
 
 ### Additional Requirements
@@ -49,14 +44,21 @@ pip install pandas streamlit plotly selenium xlrd openpyxl
 ## File Structure
 
 ```
-your_project_folder/
-├── License_List_Claude_v3.py          # Downloads data from DCA
-├── SE_Data_Process_V2.py              # Processes and cleans data  
-├── SE_Dashboard_v7.py                 # Streamlit dashboard
-├── pipeline_coordinator.py            # Coordinates all scripts
-├── run_pipeline.bat                   # Windows batch runner
-├── run_pipeline.sh                    # Linux/Mac shell runner
-└── README.md                          # This file
+CA License Dashboard/
+├── SE_Dashboard_v7.py                    # Streamlit dashboard
+├── requirements.txt                      # Python dependencies
+├── .gitignore
+├── README.md                             # This file
+├── timeline_events.csv                   # Timeline event annotations
+├── License History Table.csv             # Source for timeline events
+├── Offline Processing/
+│   ├── License_List_Claude_v3.py         # Downloads data from DCA
+│   ├── SE_Data_Process_V9.py             # Processes and cleans data
+│   └── pipeline_coordinator.py           # Coordinates all scripts
+├── tools/
+│   └── reprocess_timeline.py             # Regenerates timeline_events.csv
+└── .streamlit/
+    └── config.toml                       # Streamlit UI configuration
 ```
 
 ## Key Features
@@ -70,21 +72,22 @@ your_project_folder/
 ### Interactive Dashboard
 - **Real-time filtering** - By state, license status, date ranges
 - **Interactive visualizations** - Built with Plotly for better user experience
-- **Export capabilities** - Download filtered data and summary reports
+- **Comparison overlays** - Compare license counts between states
+- **Geographic maps** - US choropleth and California county maps
 - **Responsive design** - Works on desktop and mobile
 
-### Automation Features  
-- **One-click execution** - Run entire pipeline with single command
+### Automation Features
+- **Pipeline coordination** - Run entire pipeline with single command
 - **Error handling** - Comprehensive logging and error recovery
 - **Skip options** - Reuse existing downloaded files
 - **Progress tracking** - Clear status updates at each step
 
 ## Timeline Events (Exam/Code History)
 
-The dashboard overlays key timeline events on time‑series charts using `Github Repo/timeline_events.csv`.
+The dashboard overlays key timeline events on time-series charts using `timeline_events.csv`.
 
 Required columns:
-- `start_date` (YYYY‑MM‑DD)
+- `start_date` (YYYY-MM-DD)
 - `label` (short title)
 - `type` (e.g., `SE Exam`)
 
@@ -95,16 +98,14 @@ Preferred detail columns:
 
 If your CSV only has a single `description` field (with lines starting `Codes:`, `Format:`, `Notes:`), the app parses it automatically.
 
-Update the timeline file (Windows PowerShell):
+Update the timeline file:
 
-```powershell
-Push-Location "C:\Users\jwegleitner\OneDrive\Documents\Side Projects\CA License Dashboard\Github Repo"
-& 'C:/Users/jwegleitner/Miniforge3/python.exe' tools/reprocess_timeline.py
-git add "Github Repo/timeline_events.csv"; git commit -m "Update timeline events"; git push origin main
+```bash
+python tools/reprocess_timeline.py
 ```
 
 Notes:
-- The events toggle is under "🔍 Data Filters" in the sidebar.
+- The events toggle is under "Data Filters" in the sidebar.
 - Date filters constrain both charts and events; events do not extend axes.
 
 ## Troubleshooting
@@ -144,14 +145,14 @@ For detailed logging, edit the scripts to increase verbosity or check the log fi
 ### Paths
 Update paths in each script as needed:
 - Download directory in `License_List_Claude_v3.py`
-- Input/output paths in `SE_Data_Process_V1.py` 
+- Input/output paths in `SE_Data_Process_V9.py`
 - Default CSV path in `SE_Dashboard_v7.py`
 
 ### Dashboard Settings
 The dashboard looks for CSV files in this order:
 1. Streamlit secrets (`DATA_PATH` or `DATA_URL`)
 2. Default filename: `ProfEngrsLandSurvyrsGeologist_Data00.xls_structural_engineers_cleaned.csv`
-3. Any CSV file in the current directory
+3. Any CSV file in the current directory with license data columns
 4. File upload widget
 
 ## Data Privacy
@@ -168,7 +169,7 @@ For issues or questions:
 
 ## Version History
 
-- **v1.0**: Initial three separate scripts  
+- **v1.0**: Initial three separate scripts
 - **v2.0**: Enhanced data processor with corruption handling
 - **v3.0**: Added pipeline coordinator and automation scripts
 - **Current**: Complete integrated pipeline with robust error handling

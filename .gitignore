@@ -1,4 +1,4 @@
-﻿# Python
+# Python
 __pycache__/
 *.py[cod]
 *.so
@@ -10,9 +10,32 @@ build/
 *.xlsx
 SE_Exam_Requirements_by_State.xlsx
 
+# Generated data files
+dca_downloads/
+*_master_record.xlsx
+*_dashboard_data.csv
+_temp_master.csv
+
+# Logs
+download_log_*.txt
+*.log
+
 # Folders to ignore
 Archived/
 CA DCA downloads/
 Github Repo/
 Offline Processing/
 Other States Data/
+
+# Environment
+.env
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store
