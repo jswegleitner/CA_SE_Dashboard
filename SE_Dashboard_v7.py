@@ -14,6 +14,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import re
 from typing import Optional
 
@@ -291,6 +292,72 @@ def build_event_description_from_fields(code: str, fmt: str, notes: str) -> str:
         parts.append(_wrap_field('Notes:', notes, width=55))
     return '<br>'.join(parts)
 
+# ---------- URL query-param helpers ----------
+
+def _init_filters_from_url(df):
+    """On first page load, populate widget session state from URL query params.
+
+    This lets users share a URL like ``?states=CA,NY&start_year=2010&end_year=2024``
+    and have the dashboard open with those filters pre-applied.
+    """
+    params = st.query_params
+    if not params:
+        return
+
+    # States multiselect
+    if 'states' in params and 'state_filter' not in st.session_state:
+        url_states = [s.strip() for s in params['states'].split(',') if s.strip()]
+        valid = set(df['State'].dropna().unique()) if 'State' in df.columns else set()
+        filtered = [s for s in url_states if s in valid]
+        if filtered:
+            st.session_state['state_filter'] = filtered
+
+    # Statuses multiselect
+    if 'statuses' in params and 'status_filter' not in st.session_state:
+        url_statuses = [s.strip() for s in params['statuses'].split(',') if s.strip()]
+        valid = set(df['License Status'].dropna().unique()) if 'License Status' in df.columns else set()
+        filtered = [s for s in url_statuses if s in valid]
+        if filtered:
+            st.session_state['status_filter'] = filtered
+
+    # Date range slider
+    if 'start_year' in params and 'date_range_slider' not in st.session_state:
+        try:
+            sy = int(params['start_year'])
+            ey = int(params.get('end_year', str(sy)))
+            st.session_state['date_range_slider'] = (sy, ey)
+        except (ValueError, TypeError):
+            pass
+
+    # Comparison state
+    if 'compare' in params and 'comparison_state' not in st.session_state:
+        st.session_state['comparison_state'] = params['compare']
+
+    # Expiration types
+    if 'exp' in params and 'expired_filter' not in st.session_state:
+        url_exp = [s.strip() for s in params['exp'].split(',') if s.strip()]
+        if url_exp:
+            st.session_state['expired_filter'] = url_exp
+
+
+def _build_share_params(filters: dict) -> dict:
+    """Build a dict of query-param key/values from the current filter state."""
+    params = {}
+    if filters.get('states'):
+        params['states'] = ','.join(filters['states'])
+    if filters.get('statuses'):
+        params['statuses'] = ','.join(filters['statuses'])
+    if filters.get('start_year') is not None:
+        params['start_year'] = str(filters['start_year'])
+    if filters.get('end_year') is not None:
+        params['end_year'] = str(filters['end_year'])
+    if filters.get('comparison_state') and filters['comparison_state'] != 'None':
+        params['compare'] = filters['comparison_state']
+    if filters.get('expiration_types'):
+        params['exp'] = ','.join(filters['expiration_types'])
+    return params
+
+
 # ---------- Filters & visuals (updated with Plotly) ----------
 def create_filters(df):
     filters = {}
@@ -420,6 +487,18 @@ def create_visualizations(filtered_df, show_events: bool, start_year: Optional[i
     plot_time_series(filtered_df, bucket_size, lock_y, events_df=events_df, show_events=show_events, start_year=start_year, end_year=end_year, comparison_state=comparison_state, full_df=full_df)
     # Line chart variant
     plot_time_series_line(filtered_df, bucket_size, lock_y, events_df=events_df, show_events=show_events, start_year=start_year, end_year=end_year)
+    st.markdown("---")
+
+    # Year-over-year comparison
+    plot_yoy_comparison(filtered_df, start_year=start_year, end_year=end_year)
+    st.markdown("---")
+
+    # Yearly retirements
+    plot_yearly_retirements(filtered_df, start_year=start_year, end_year=end_year)
+    st.markdown("---")
+
+    # Active licenses per year
+    plot_active_licenses_per_year(filtered_df, start_year=start_year, end_year=end_year)
     st.markdown("---")
 
     # By State
@@ -1052,6 +1131,208 @@ def plot_ca_county_map(filtered_df):
         st.caption(f"Unmapped county values (not shown on map): {', '.join(unmapped)}")
 
 
+# ---------- Year-over-year comparison ----------
+
+def plot_yoy_comparison(filtered_df, start_year=None, end_year=None):
+    """Dual-axis chart: absolute issuance counts (bars) + YoY % change (line)."""
+    st.subheader("📊 Year-over-Year Comparison")
+
+    if 'Original Issue Date' not in filtered_df.columns:
+        st.info("Original Issue Date column not available.")
+        return
+    if not pd.api.types.is_datetime64_any_dtype(filtered_df['Original Issue Date']):
+        st.info("Original Issue Date is not in datetime format.")
+        return
+
+    df = filtered_df.dropna(subset=['Original Issue Date']).copy()
+    df['Year'] = df['Original Issue Date'].dt.year.astype(int)
+    yearly = df.groupby('Year').size().reset_index(name='Count')
+    yearly = yearly.sort_values('Year')
+
+    # Fill year gaps so the chart is continuous
+    if start_year is not None and end_year is not None:
+        full_years = pd.DataFrame({'Year': range(int(start_year), int(end_year) + 1)})
+        yearly = full_years.merge(yearly, on='Year', how='left').fillna(0)
+        yearly['Count'] = yearly['Count'].astype(int)
+
+    if len(yearly) < 2:
+        st.info("Need at least two years of data for year-over-year comparison.")
+        return
+
+    yearly['Change'] = yearly['Count'].diff()
+    yearly['Pct_Change'] = yearly['Count'].pct_change() * 100
+
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+    fig.add_trace(go.Bar(
+        x=yearly['Year'], y=yearly['Count'],
+        name='Licenses Issued', marker_color='steelblue',
+        text=yearly['Count'], textposition='outside',
+        hovertemplate='<b>%{x}</b><br>Issued: %{y}<extra></extra>'
+    ), secondary_y=False)
+
+    # YoY % change line (skip first year — no prior year to compare)
+    yoy = yearly.iloc[1:].copy()
+    fig.add_trace(go.Scatter(
+        x=yoy['Year'], y=yoy['Pct_Change'],
+        name='YoY Change %', mode='lines+markers',
+        line=dict(color='darkorange', width=2),
+        marker=dict(size=6),
+        hovertemplate='<b>%{x}</b><br>Change: %{y:+.1f}%<extra></extra>'
+    ), secondary_y=True)
+
+    fig.update_layout(
+        title="Year-over-Year License Issuance Comparison",
+        xaxis_title="Year",
+        height=500,
+        hovermode='x unified',
+        legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1)
+    )
+    fig.update_yaxes(title_text="Licenses Issued", secondary_y=False)
+    fig.update_yaxes(title_text="YoY Change (%)", secondary_y=True,
+                     zeroline=True, zerolinecolor="lightgray")
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    with st.expander("📊 Growth Statistics"):
+        valid_pct = yearly['Pct_Change'].dropna()
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            st.metric("Avg Growth Rate", f"{valid_pct.mean():+.1f}%")
+        with c2:
+            best_idx = yearly['Count'].idxmax()
+            st.metric("Best Year", int(yearly.loc[best_idx, 'Year']))
+        with c3:
+            st.metric("Best Year Count", int(yearly['Count'].max()))
+        with c4:
+            st.metric("Total Licenses", f"{int(yearly['Count'].sum()):,}")
+
+
+# ---------- Yearly retirements (expirations) ----------
+
+def plot_yearly_retirements(filtered_df, start_year=None, end_year=None):
+    """Bar chart of license expirations by year."""
+    st.subheader("📉 License Expirations (Retirements) by Year")
+
+    if 'Expiration Date' not in filtered_df.columns:
+        st.info("No Expiration Date column available.")
+        return
+    if not pd.api.types.is_datetime64_any_dtype(filtered_df['Expiration Date']):
+        st.info("Expiration Date is not in datetime format.")
+        return
+
+    df = filtered_df.dropna(subset=['Expiration Date']).copy()
+    current_year = pd.Timestamp.now().year
+    df['Exp_Year'] = df['Expiration Date'].dt.year.astype(int)
+
+    # Only past expirations (actual retirements, not future scheduled)
+    df = df[df['Exp_Year'] <= current_year]
+    if start_year is not None:
+        df = df[df['Exp_Year'] >= int(start_year)]
+    if end_year is not None:
+        df = df[df['Exp_Year'] <= min(int(end_year), current_year)]
+
+    yearly = df.groupby('Exp_Year').size().reset_index(name='Expired')
+    yearly = yearly.sort_values('Exp_Year')
+
+    if yearly.empty:
+        st.info("No expiration data for the selected range.")
+        return
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=yearly['Exp_Year'], y=yearly['Expired'],
+        name='Licenses Expired', marker_color='indianred',
+        text=yearly['Expired'], textposition='outside',
+        hovertemplate='<b>Year %{x}</b><br>Expired: %{y}<extra></extra>'
+    ))
+
+    fig.update_layout(
+        title="Structural Engineer License Expirations by Year",
+        xaxis_title="Year",
+        yaxis_title="Licenses Expired",
+        height=500,
+        showlegend=False,
+        hovermode='x unified'
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    with st.expander("📊 Expiration Statistics"):
+        c1, c2, c3 = st.columns(3)
+        peak_idx = yearly['Expired'].idxmax()
+        with c1:
+            st.metric("Peak Year", int(yearly.loc[peak_idx, 'Exp_Year']))
+        with c2:
+            st.metric("Peak Expirations", int(yearly['Expired'].max()))
+        with c3:
+            st.metric("Avg per Year", f"{yearly['Expired'].mean():.1f}")
+
+
+# ---------- Active licenses per year ----------
+
+def plot_active_licenses_per_year(filtered_df, start_year=None, end_year=None):
+    """Area chart showing how many licenses were active at the end of each year.
+
+    A license is counted as active in year Y if:
+      - Original Issue Date <= Dec 31 of year Y  (already issued)
+      - Expiration Date     >= Jan 1 of year Y   (not yet expired)
+    """
+    st.subheader("📗 Active Licenses per Year")
+
+    has_issue = 'Original Issue Date' in filtered_df.columns and pd.api.types.is_datetime64_any_dtype(filtered_df['Original Issue Date'])
+    has_exp = 'Expiration Date' in filtered_df.columns and pd.api.types.is_datetime64_any_dtype(filtered_df['Expiration Date'])
+    if not has_issue or not has_exp:
+        st.info("Both Original Issue Date and Expiration Date are needed for this chart.")
+        return
+
+    df = filtered_df.dropna(subset=['Original Issue Date', 'Expiration Date']).copy()
+    if df.empty:
+        st.info("No records with both issue and expiration dates.")
+        return
+
+    min_year = int(df['Original Issue Date'].dt.year.min()) if start_year is None else int(start_year)
+    max_year = int(pd.Timestamp.now().year) if end_year is None else min(int(end_year), pd.Timestamp.now().year)
+
+    years = list(range(min_year, max_year + 1))
+    active_counts = []
+    for y in years:
+        yr_start = pd.Timestamp(f"{y}-01-01")
+        yr_end = pd.Timestamp(f"{y}-12-31")
+        count = int(((df['Original Issue Date'] <= yr_end) & (df['Expiration Date'] >= yr_start)).sum())
+        active_counts.append(count)
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=years, y=active_counts,
+        mode='lines+markers', fill='tozeroy',
+        name='Active Licenses',
+        line=dict(color='seagreen', width=2),
+        marker=dict(size=5),
+        hovertemplate='<b>%{x}</b><br>Active: %{y:,}<extra></extra>'
+    ))
+
+    fig.update_layout(
+        title="Active Structural Engineer Licenses per Year",
+        xaxis_title="Year",
+        yaxis_title="Active Licenses",
+        height=500,
+        hovermode='x unified'
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    with st.expander("📊 Active License Statistics"):
+        c1, c2, c3 = st.columns(3)
+        peak_idx = active_counts.index(max(active_counts))
+        with c1:
+            st.metric("Peak Year", years[peak_idx])
+        with c2:
+            st.metric("Peak Count", f"{max(active_counts):,}")
+        with c3:
+            st.metric("Current", f"{active_counts[-1]:,}" if active_counts else "N/A")
+
+
 def display_summary_metrics(filtered_df):
     col1, col2, col3, col4 = st.columns(4)
     with col1:
@@ -1096,6 +1377,11 @@ def main():
             df = parse_dates(df)
             if df is not None:
                 st.sidebar.success(f"✅ Loaded: {Path(src).name}")
+                # Data freshness indicator
+                if 'Dashboard_Updated' in df.columns:
+                    latest = df['Dashboard_Updated'].dropna()
+                    if not latest.empty:
+                        st.sidebar.caption(f"Data processed: {latest.iloc[0]}")
     
     # If no file found automatically, show upload option
     if df is None:
@@ -1132,8 +1418,18 @@ def main():
 
     # (file information expander removed by user request)
 
+    # Seed widget defaults from URL query params (first load only)
+    _init_filters_from_url(df)
+
     # Filters
     filters = create_filters(df)
+
+    # Shareable URL button
+    st.sidebar.markdown("---")
+    if st.sidebar.button("Share current filters"):
+        st.query_params.from_dict(_build_share_params(filters))
+        st.sidebar.success("URL updated — copy it from your browser address bar.")
+
     full_df = df.copy()  # Keep unfiltered copy for comparison overlay
     filtered_df = apply_filters(df, filters)
 
