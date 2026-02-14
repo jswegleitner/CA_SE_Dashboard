@@ -449,18 +449,18 @@ Structural Engineer,2026,CA,Los Angeles,1975-12-10,2025-09-30,Delinquent
 Structural Engineer,2027,IL,,1975-12-10,2023-12-31,Delinquent
 Structural Engineer,2030,CA,Sacramento,1976-10-13,2027-09-30,Active
 Structural Engineer,2031,WA,,1976-12-08,2021-03-31,Delinquent
-Structural Engineer,2034,CA,Fresno,1976-12-08,2025-12-31,Active
+Structural Engineer,2034,CA,Fresno,1976-12-08,2025-12-31,Delinquent
 Structural Engineer,2037,CA,Contra Costa,1976-12-08,2027-09-30,Active
 Structural Engineer,2039,CA,Los Angeles,1976-12-08,2027-09-30,Active
 Structural Engineer,2040,CA,Los Angeles,1976-12-08,2027-06-30,Active
 Structural Engineer,2042,CA,Santa Barbara,1976-12-08,2021-12-31,Delinquent
 Structural Engineer,2046,MO,,1976-12-08,2022-03-31,Delinquent
 Structural Engineer,2049,CA,Orange,1976-12-08,2027-12-31,Active
-Structural Engineer,2056,CA,Santa Clara,1976-12-08,2025-12-31,Active
+Structural Engineer,2056,CA,Santa Clara,1976-12-08,2027-12-31,Active
 Structural Engineer,2062,CA,Los Angeles,1976-12-08,2027-06-30,Active
 Structural Engineer,2067,CA,Los Angeles,1976-12-08,2027-09-30,Active
 Structural Engineer,2073,CA,San Diego,1976-12-08,2027-12-31,Active
-Structural Engineer,2077,CA,Los Angeles,1976-12-08,2025-12-31,Active
+Structural Engineer,2077,CA,Los Angeles,1976-12-08,2027-12-31,Active
 Structural Engineer,2079,CA,Contra Costa,1976-12-08,2027-12-31,Active
 Structural Engineer,2081,CA,Santa Clara,1976-12-08,2021-06-30,Delinquent
 Structural Engineer,2083,CA,Los Angeles,1976-12-08,2027-09-30,Active
@@ -486,7 +486,7 @@ Structural Engineer,2127,CA,Shasta,1977-12-14,2021-09-30,Delinquent
 Structural Engineer,2128,CA,Santa Cruz,1977-12-14,2027-12-31,Active
 Structural Engineer,2129,CA,Contra Costa,1977-12-14,2021-09-30,Delinquent
 Structural Engineer,2132,CA,Orange,1977-12-14,2027-12-31,Active
-Structural Engineer,2134,CA,Orange,1977-12-14,2025-12-31,Active
+Structural Engineer,2134,CA,Orange,1977-12-14,2027-12-31,Active
 Structural Engineer,2137,CA,San Diego,1977-12-14,2027-12-31,Active
 Structural Engineer,2138,CA,Los Angeles,1977-12-14,2023-12-31,Delinquent
 Structural Engineer,2142,CA,Los Angeles,1977-12-14,2027-12-31,Active
@@ -523,9 +523,9 @@ Structural Engineer,2240,FL,,1978-12-13,2027-12-31,Active
 Structural Engineer,2241,VA,,1978-12-13,2022-06-30,Delinquent
 Structural Engineer,2243,CA,Santa Barbara,1978-12-13,2027-12-31,Active
 Structural Engineer,2245,CA,Sacramento,1978-12-13,2027-09-30,Active
-Structural Engineer,2246,CA,Alameda,1978-12-13,2025-12-31,Active
+Structural Engineer,2246,CA,Alameda,1978-12-13,2025-12-31,Delinquent
 Structural Engineer,2249,CA,Los Angeles,1978-12-13,2021-12-31,Delinquent
-Structural Engineer,2252,CA,Orange,1978-12-13,2025-12-31,Active
+Structural Engineer,2252,CA,Orange,1978-12-13,2025-12-31,Delinquent
 Structural Engineer,2259,CA,Contra Costa,1978-12-13,2024-12-31,Delinquent
 Structural Engineer,2260,CA,Contra Costa,1978-12-13,2023-09-30,Delinquent
 Structural Engineer,2263,CA,Alameda,1978-12-13,2027-12-31,Active
@@ -537,14 +537,14 @@ Structural Engineer,2277,CA,Alameda,1980-02-13,2027-12-31,Active
 Structural Engineer,2278,CA,San Francisco,1980-02-13,2024-03-31,Delinquent
 Structural Engineer,2279,CA,Santa Clara,1980-02-13,2026-03-31,Active
 Structural Engineer,2280,CA,Santa Clara,1980-02-13,2026-03-31,Active
-Structural Engineer,2284,CA,San Mateo,1980-02-13,2025-12-31,Active
+Structural Engineer,2284,CA,San Mateo,1980-02-13,2027-12-31,Active
 Structural Engineer,2285,CA,Los Angeles,1980-02-13,2027-03-31,Active
 Structural Engineer,2289,CA,Los Angeles,1980-02-13,2027-03-31,Active
 Structural Engineer,2290,CA,Los Angeles,1980-02-13,2027-09-30,Active
 Structural Engineer,2295,CA,Contra Costa,1980-02-13,2027-12-31,Active
-Structural Engineer,2297,CA,Orange,1980-02-13,2025-12-31,Active
+Structural Engineer,2297,CA,Orange,1980-02-13,2027-12-31,Active
 Structural Engineer,2303,CA,Marin,1980-02-13,2027-09-30,Active
-Structural Engineer,2305,CA,Alameda,1980-02-13,2025-12-31,Active
+Structural Engineer,2305,CA,Alameda,1980-02-13,2027-12-31,Active
 Structural Engineer,2307,CA,Alameda,1980-02-13,2027-12-31,Active
 Structural Engineer,2309,CA,Orange,1980-02-13,2027-03-31,Active
 Structural Engineer,2310,CA,Stanislaus,1980-02-13,2027-03-31,Active
@@ -553,7 +553,7 @@ Structural Engineer,2314,CA,Los Angeles,1980-02-13,2027-12-31,Active
 Structural Engineer,2315,CA,San Francisco,1980-02-13,2027-03-31,Active
 Structural Engineer,2318,CA,Alameda,1980-02-13,2023-09-30,Delinquent
 Structural Engineer,2319,CA,Los Angeles,1980-02-13,2027-03-31,Active
-Structural Engineer,2320,ID,,1980-02-13,2025-12-31,Active
+Structural Engineer,2320,ID,,1980-02-13,2025-12-31,Delinquent
 Structural Engineer,2321,CA,Yolo,1980-02-13,2027-03-31,Active
 Structural Engineer,2323,AZ,,1980-02-13,2027-03-31,Active
 Structural Engineer,2324,CA,Ventura,1980-02-13,2026-03-31,Active
@@ -585,7 +585,7 @@ Structural Engineer,2378,CA,Orange,1981-01-21,2027-03-31,Active
 Structural Engineer,2379,CA,Sonoma,1981-01-21,2026-03-31,Active
 Structural Engineer,2380,CA,Sacramento,1981-01-21,2027-09-30,Active
 Structural Engineer,2382,CA,Los Angeles,1981-01-21,2021-03-31,Delinquent
-Structural Engineer,2386,CA,Fresno,1981-01-21,2026-03-31,Active
+Structural Engineer,2386,CA,Fresno,1981-01-21,2028-03-31,Active
 Structural Engineer,2387,WA,,1981-01-21,2027-12-31,Active
 Structural Engineer,2388,WA,,1981-01-21,2026-03-31,Active
 Structural Engineer,2391,CA,Los Angeles,1981-01-21,2027-03-31,Active
@@ -615,7 +615,7 @@ Structural Engineer,2424,CA,Alameda,1982-01-20,2027-03-31,Active
 Structural Engineer,2425,CA,San Mateo,1982-01-20,2026-03-31,Active
 Structural Engineer,2427,CA,Merced,1982-01-20,2026-03-31,Active
 Structural Engineer,2428,CA,Los Angeles,1982-01-20,2026-03-31,Active
-Structural Engineer,2429,CA,Alameda,1982-01-20,2025-12-31,Active
+Structural Engineer,2429,CA,Alameda,1982-01-20,2025-12-31,Delinquent
 Structural Engineer,2431,CA,Marin,1982-01-20,2022-03-31,Delinquent
 Structural Engineer,2433,CA,Napa,1982-01-20,2027-06-30,Active
 Structural Engineer,2434,CA,Orange,1982-01-20,2026-03-31,Active
@@ -669,7 +669,7 @@ Structural Engineer,2519,CA,Los Angeles,1983-01-21,2021-09-30,Delinquent
 Structural Engineer,2521,CA,Los Angeles,1983-01-21,2026-12-31,Active
 Structural Engineer,2522,CA,El Dorado,1983-01-21,2026-03-31,Active
 Structural Engineer,2524,CA,Los Angeles,1983-01-21,2024-03-31,Delinquent
-Structural Engineer,2525,CA,Orange,1983-01-21,2026-03-31,Active
+Structural Engineer,2525,CA,Orange,1983-01-21,2028-03-31,Active
 Structural Engineer,2526,CA,Santa Clara,1983-01-21,2022-03-31,Delinquent
 Structural Engineer,2527,CA,Sacramento,1983-01-21,2022-03-31,Delinquent
 Structural Engineer,2528,OR,,1983-01-21,2026-03-31,Active
@@ -780,7 +780,7 @@ Structural Engineer,2698,CA,San Diego,1984-03-16,2026-06-30,Active
 Structural Engineer,2701,NV,,1984-09-21,2026-09-30,Active
 Structural Engineer,2704,WA,,1984-12-10,2027-06-30,Active
 Structural Engineer,2705,CA,Orange,1984-11-30,2024-03-31,Active
-Structural Engineer,2706,CA,Alameda,1984-11-30,2025-12-31,Active
+Structural Engineer,2706,CA,Alameda,1984-11-30,2025-12-31,Delinquent
 Structural Engineer,2707,AZ,,1985-02-28,2026-06-30,Active
 Structural Engineer,2708,CA,San Francisco,1985-02-28,2024-06-30,Active
 Structural Engineer,2709,CA,San Diego,1985-02-28,2026-06-30,Active
@@ -898,7 +898,7 @@ Structural Engineer,2857,CA,Los Angeles,1986-03-21,2023-09-30,Delinquent
 Structural Engineer,2858,CA,Sonoma,1986-03-21,2027-09-30,Active
 Structural Engineer,2859,AZ,,1986-03-21,2026-06-30,Active
 Structural Engineer,2861,CA,Contra Costa,1986-03-21,2027-09-30,Active
-Structural Engineer,2862,MO,,1986-03-21,2025-12-31,Active
+Structural Engineer,2862,MO,,1986-03-21,2025-12-31,Delinquent
 Structural Engineer,2863,HI,,1986-03-21,2027-09-30,Active
 Structural Engineer,2864,AZ,,1986-03-21,2022-12-31,Delinquent
 Structural Engineer,2866,CA,Contra Costa,1986-03-21,2027-09-30,Active
@@ -922,7 +922,7 @@ Structural Engineer,2893,CA,Los Angeles,1986-03-21,2026-03-31,Active
 Structural Engineer,2896,WA,,1986-06-20,2023-12-31,Delinquent
 Structural Engineer,2897,ID,,1986-08-01,2021-03-31,Delinquent
 Structural Engineer,2898,WA,,1986-08-01,2026-06-30,Active
-Structural Engineer,2899,CA,Los Angeles,1986-08-01,2025-12-31,Active
+Structural Engineer,2899,CA,Los Angeles,1986-08-01,2027-12-31,Active
 Structural Engineer,2900,CA,Alameda,1986-08-01,2027-09-30,Active
 Structural Engineer,2902,NV,,1986-11-14,2020-12-31,Delinquent
 Structural Engineer,2906,CA,San Diego,1987-01-23,2026-06-30,Active
@@ -1075,7 +1075,7 @@ Structural Engineer,3094,CA,San Diego,1988-07-08,2027-03-31,Active
 Structural Engineer,3095,CA,San Mateo,1988-07-08,2022-06-30,Delinquent
 Structural Engineer,3097,CA,Calaveras,1988-07-08,2027-09-30,Active
 Structural Engineer,3098,NV,,1988-08-19,2026-03-31,Active
-Structural Engineer,3100,WA,,1988-08-19,2025-12-31,Active
+Structural Engineer,3100,WA,,1988-08-19,2025-12-31,Delinquent
 Structural Engineer,3103,CA,San Diego,1988-11-18,2027-12-31,Active
 Structural Engineer,3105,NV,,1988-11-18,2027-12-31,Active
 Structural Engineer,3106,CA,Sonoma,1988-11-18,2023-09-30,Delinquent
@@ -1133,7 +1133,7 @@ Structural Engineer,3166,TN,,1988-11-18,2025-03-31,Delinquent
 Structural Engineer,3167,CA,Contra Costa,1988-11-18,2027-12-31,Active
 Structural Engineer,3168,CA,San Francisco,1988-11-18,2026-06-30,Active
 Structural Engineer,3169,CO,,1988-11-18,2027-06-30,Active
-Structural Engineer,3170,CA,Placer,1988-11-18,2025-12-31,Active
+Structural Engineer,3170,CA,Placer,1988-11-18,2025-12-31,Delinquent
 Structural Engineer,3173,CA,Orange,1988-11-18,2026-06-30,Active
 Structural Engineer,3174,CA,Orange,1988-11-18,2022-06-30,Delinquent
 Structural Engineer,3175,CA,Los Angeles,1988-11-18,2027-03-31,Active
@@ -1189,10 +1189,10 @@ Structural Engineer,3243,CA,Contra Costa,1990-01-26,2023-03-31,Delinquent
 Structural Engineer,3244,NV,,1990-01-26,2027-12-31,Active
 Structural Engineer,3245,NV,,1990-01-26,2027-12-31,Active
 Structural Engineer,3246,CA,Orange,1990-01-26,2027-03-31,Active
-Structural Engineer,3247,CA,Contra Costa,1990-01-26,2025-12-31,Active
+Structural Engineer,3247,CA,Contra Costa,1990-01-26,2025-12-31,Delinquent
 Structural Engineer,3248,CA,Los Angeles,1990-01-26,2027-03-31,Active
 Structural Engineer,3249,FL,,1990-01-26,2027-03-31,Active
-Structural Engineer,3250,CA,Contra Costa,1990-01-26,2025-12-31,Active
+Structural Engineer,3250,CA,Contra Costa,1990-01-26,2027-12-31,Active
 Structural Engineer,3251,CA,Fresno,1990-01-26,2027-03-31,Active
 Structural Engineer,3252,CA,Shasta,1990-01-26,2027-03-31,Active
 Structural Engineer,3253,CA,San Francisco,1990-01-26,2027-03-31,Active
@@ -1347,7 +1347,7 @@ Structural Engineer,3428,CA,Orange,1990-12-14,2026-06-30,Active
 Structural Engineer,3430,CA,Orange,1990-12-14,2026-06-30,Active
 Structural Engineer,3431,CA,San Bernardino,1990-12-14,2027-12-31,Active
 Structural Engineer,3432,IL,,1990-12-14,2027-03-31,Active
-Structural Engineer,3433,CO,,1990-12-14,2025-12-31,Active
+Structural Engineer,3433,CO,,1990-12-14,2025-12-31,Delinquent
 Structural Engineer,3434,OR,,1990-12-14,2025-03-31,Delinquent
 Structural Engineer,3435,CA,San Diego,1990-12-14,2027-09-30,Active
 Structural Engineer,3436,CA,Alameda,1990-12-14,2027-03-31,Active
@@ -1388,7 +1388,7 @@ Structural Engineer,3495,WA,,1991-10-04,2027-12-31,Active
 Structural Engineer,3496,WA,,1991-10-04,2023-03-31,Delinquent
 Structural Engineer,3498,WA,,1991-10-04,2027-09-30,Active
 Structural Engineer,3499,CA,Orange,1991-12-20,2027-06-30,Active
-Structural Engineer,3500,CA,Los Angeles,1991-12-20,2025-03-31,Delinquent
+Structural Engineer,3500,CA,Los Angeles,1991-12-20,2027-03-31,Active
 Structural Engineer,3503,CA,Los Angeles,1991-12-20,2026-03-31,Active
 Structural Engineer,3504,CA,Los Angeles,1991-12-20,2027-06-30,Active
 Structural Engineer,3505,CA,Contra Costa,1991-12-20,2027-03-31,Active
@@ -1428,7 +1428,7 @@ Structural Engineer,3547,CA,Ventura,1991-12-20,2021-06-30,Delinquent
 Structural Engineer,3548,FL,,1991-12-20,2021-03-31,Delinquent
 Structural Engineer,3549,CA,Santa Cruz,1991-12-20,2026-03-31,Active
 Structural Engineer,3550,CA,Shasta,1991-12-20,2027-03-31,Active
-Structural Engineer,3551,CA,Sacramento,1991-12-20,2026-03-31,Active
+Structural Engineer,3551,CA,Sacramento,1991-12-20,2028-03-31,Active
 Structural Engineer,3552,CA,Los Angeles,1991-12-20,2027-06-30,Active
 Structural Engineer,3553,CA,San Diego,1991-12-20,2027-03-31,Active
 Structural Engineer,3554,CA,Los Angeles,1991-12-20,2026-03-31,Active
@@ -1506,7 +1506,7 @@ Structural Engineer,3639,CA,Alameda,1992-09-25,2027-09-30,Active
 Structural Engineer,3640,CA,Orange,1992-09-25,2027-03-31,Active
 Structural Engineer,3642,WA,,1992-09-25,2026-12-31,Active
 Structural Engineer,3645,WA,,1992-11-20,2022-06-30,Delinquent
-Structural Engineer,3647,CA,Contra Costa,1993-01-29,2025-12-31,Active
+Structural Engineer,3647,CA,Contra Costa,1993-01-29,2027-12-31,Active
 Structural Engineer,3648,CA,Orange,1993-01-29,2026-03-31,Active
 Structural Engineer,3649,CA,Los Angeles,1993-01-29,2027-09-30,Active
 Structural Engineer,3650,CA,San Mateo,1993-01-29,2026-06-30,Active
@@ -1586,7 +1586,7 @@ Structural Engineer,3734,CA,Santa Barbara,1993-01-29,2026-03-31,Active
 Structural Engineer,3735,CA,Contra Costa,1993-01-29,2027-03-31,Active
 Structural Engineer,3736,CA,San Francisco,1993-01-29,2026-03-31,Active
 Structural Engineer,3737,CA,Sacramento,1993-01-29,2026-03-31,Active
-Structural Engineer,3738,CA,Orange,1993-01-29,2026-03-31,Active
+Structural Engineer,3738,CA,Orange,1993-01-29,2028-03-31,Active
 Structural Engineer,3740,CA,Sacramento,1993-01-29,2027-03-31,Active
 Structural Engineer,3741,TX,,1993-01-29,2023-03-31,Delinquent
 Structural Engineer,3742,CA,Orange,1993-01-29,2026-03-31,Active
@@ -1720,8 +1720,8 @@ Structural Engineer,3908,OR,,1994-11-18,2022-06-30,Delinquent
 Structural Engineer,3909,WA,,1994-11-18,2026-06-30,Active
 Structural Engineer,3911,CA,Sacramento,1995-01-06,2026-06-30,Active
 Structural Engineer,3912,CA,Santa Clara,1995-02-10,2027-06-30,Active
-Structural Engineer,3913,CA,Contra Costa,1995-02-10,2025-12-31,Active
-Structural Engineer,3914,UT,,1995-02-10,2025-12-31,Active
+Structural Engineer,3913,CA,Contra Costa,1995-02-10,2025-12-31,Delinquent
+Structural Engineer,3914,UT,,1995-02-10,2025-12-31,Delinquent
 Structural Engineer,3916,FL,,1995-02-10,2027-12-31,Active
 Structural Engineer,3917,CO,,1995-02-10,2027-12-31,Active
 Structural Engineer,3918,CA,San Diego,1995-02-10,2027-03-31,Active
@@ -1729,7 +1729,7 @@ Structural Engineer,3919,CA,Placer,1995-02-10,2026-03-31,Active
 Structural Engineer,3920,WA,,1995-02-10,2027-12-31,Active
 Structural Engineer,3921,CA,Orange,1995-02-10,2027-12-31,Active
 Structural Engineer,3922,NH,,1995-02-10,2027-06-30,Active
-Structural Engineer,3923,CA,Contra Costa,1995-02-10,2025-12-31,Active
+Structural Engineer,3923,CA,Contra Costa,1995-02-10,2027-12-31,Active
 Structural Engineer,3924,CA,San Francisco,1995-02-10,2027-06-30,Active
 Structural Engineer,3925,CA,Santa Clara,1995-02-10,2026-06-30,Active
 Structural Engineer,3926,CA,Los Angeles,1995-02-10,2027-06-30,Active
@@ -1750,7 +1750,7 @@ Structural Engineer,3941,CA,Orange,1995-02-10,2026-09-30,Active
 Structural Engineer,3942,CA,El Dorado,1995-02-10,2026-03-31,Active
 Structural Engineer,3943,CA,Los Angeles,1995-02-10,2027-12-31,Active
 Structural Engineer,3944,CA,Sacramento,1995-02-10,2026-06-30,Active
-Structural Engineer,3945,CA,Los Angeles,1995-02-10,2025-12-31,Active
+Structural Engineer,3945,CA,Los Angeles,1995-02-10,2027-12-31,Active
 Structural Engineer,3947,CA,Los Angeles,1995-02-10,2026-03-31,Active
 Structural Engineer,3948,CA,Los Angeles,1995-02-10,2027-03-31,Active
 Structural Engineer,3949,CA,Orange,1995-02-10,2027-12-31,Active
@@ -1799,7 +1799,7 @@ Structural Engineer,3995,CA,Sacramento,1995-07-14,2026-09-30,Active
 Structural Engineer,3996,CA,Los Angeles,1995-07-14,2027-06-30,Active
 Structural Engineer,3997,CA,Sacramento,1995-07-14,2026-03-31,Active
 Structural Engineer,3999,WA,,1995-07-14,2026-03-31,Active
-Structural Engineer,4001,NV,,1995-08-25,2025-12-31,Active
+Structural Engineer,4001,NV,,1995-08-25,2025-12-31,Delinquent
 Structural Engineer,4003,MI,,1995-11-17,2023-12-31,Delinquent
 Structural Engineer,4005,CA,Sacramento,1996-02-09,2026-09-30,Active
 Structural Engineer,4006,OR,,1996-02-09,2027-06-30,Active
@@ -2051,7 +2051,7 @@ Structural Engineer,4332,CA,Los Angeles,1999-02-26,2026-03-31,Active
 Structural Engineer,4333,CA,Los Angeles,1999-02-26,2026-06-30,Active
 Structural Engineer,4334,CA,San Diego,1999-02-26,2027-06-30,Active
 Structural Engineer,4335,CA,Los Angeles,1999-02-26,2027-12-31,Active
-Structural Engineer,4336,CA,Santa Clara,1999-02-26,2025-12-31,Active
+Structural Engineer,4336,CA,Santa Clara,1999-02-26,2025-12-31,Delinquent
 Structural Engineer,4337,CA,El Dorado,1999-02-26,2027-03-31,Active
 Structural Engineer,4338,CA,Los Angeles,1999-02-26,2027-12-31,Active
 Structural Engineer,4339,CA,Los Angeles,1999-02-26,2027-03-31,Active
@@ -2081,7 +2081,7 @@ Structural Engineer,4367,MT,,1999-07-23,2027-06-30,Active
 Structural Engineer,4368,CA,El Dorado,1999-07-23,2027-12-31,Active
 Structural Engineer,4369,HI,,1999-09-17,2027-06-30,Active
 Structural Engineer,4370,WA,,1999-09-17,2027-12-31,Active
-Structural Engineer,4372,ID,,1999-11-05,2025-12-31,Active
+Structural Engineer,4372,ID,,1999-11-05,2025-12-31,Delinquent
 Structural Engineer,4373,AP,,1999-11-05,2024-12-31,Delinquent
 Structural Engineer,4374,WA,,1999-11-05,2021-12-31,Delinquent
 Structural Engineer,4375,CA,San Francisco,2000-02-25,2026-09-30,Active
@@ -2096,7 +2096,7 @@ Structural Engineer,4383,WA,,2000-02-25,2027-09-30,Active
 Structural Engineer,4384,WA,,2000-02-25,2027-12-31,Active
 Structural Engineer,4385,CA,El Dorado,2000-02-25,2027-12-31,Active
 Structural Engineer,4386,CA,El Dorado,2000-02-25,2026-12-31,Active
-Structural Engineer,4387,CA,Los Angeles,2000-02-25,2025-12-31,Active
+Structural Engineer,4387,CA,Los Angeles,2000-02-25,2027-12-31,Active
 Structural Engineer,4388,CA,Santa Clara,2000-02-25,2026-06-30,Active
 Structural Engineer,4390,CA,Orange,2000-02-25,2027-06-30,Active
 Structural Engineer,4391,NV,,2000-02-25,2027-03-31,Active
@@ -2367,7 +2367,7 @@ Structural Engineer,4670,CA,Sacramento,2003-01-23,2026-12-31,Active
 Structural Engineer,4671,CA,El Dorado,2003-01-23,2026-06-30,Active
 Structural Engineer,4672,CA,El Dorado,2003-01-23,2026-12-31,Active
 Structural Engineer,4673,AZ,,2003-01-23,2022-06-30,Delinquent
-Structural Engineer,4674,CA,Orange,2003-01-23,2026-03-31,Active
+Structural Engineer,4674,CA,Orange,2003-01-23,2028-03-31,Active
 Structural Engineer,4675,MN,,2003-01-23,2023-12-31,Delinquent
 Structural Engineer,4676,AZ,,2003-01-23,2026-09-30,Active
 Structural Engineer,4677,CA,Alameda,2003-01-23,2027-12-31,Active
@@ -2459,7 +2459,7 @@ Structural Engineer,4773,CA,San Diego,2004-04-23,2027-12-31,Active
 Structural Engineer,4774,CA,Santa Clara,2004-04-23,2027-06-30,Active
 Structural Engineer,4775,CA,San Diego,2004-04-23,2026-09-30,Active
 Structural Engineer,4776,CA,Alameda,2004-04-23,2026-06-30,Active
-Structural Engineer,4777,NV,,2004-04-23,2025-12-31,Active
+Structural Engineer,4777,NV,,2004-04-23,2025-12-31,Delinquent
 Structural Engineer,4779,WA,,2004-09-17,2026-06-30,Active
 Structural Engineer,4780,WA,,2004-09-17,2027-09-30,Active
 Structural Engineer,4781,WA,,2004-11-10,2022-09-30,Delinquent
@@ -2579,7 +2579,7 @@ Structural Engineer,4894,CA,Riverside,2006-01-20,2026-12-31,Active
 Structural Engineer,4895,UT,,2006-01-20,2026-09-30,Active
 Structural Engineer,4896,CA,Los Angeles,2006-01-20,2027-12-31,Active
 Structural Engineer,4897,CA,Los Angeles,2006-01-20,2026-09-30,Active
-Structural Engineer,4898,CA,Los Angeles,2006-01-20,2025-12-31,Active
+Structural Engineer,4898,CA,Los Angeles,2006-01-20,2025-12-31,Delinquent
 Structural Engineer,4899,CA,Orange,2006-01-20,2026-06-30,Active
 Structural Engineer,4900,CA,Placer,2006-01-20,2026-06-30,Active
 Structural Engineer,4901,CA,Yolo,2006-01-20,2027-06-30,Active
@@ -2872,7 +2872,7 @@ Structural Engineer,5190,CA,Contra Costa,2008-03-14,2026-09-30,Active
 Structural Engineer,5191,MN,,2008-03-14,2026-12-31,Active
 Structural Engineer,5192,CA,Santa Clara,2008-05-09,2027-09-30,Active
 Structural Engineer,5193,NV,,2008-05-09,2026-09-30,Active
-Structural Engineer,5194,CA,Alameda,2008-05-09,2025-12-31,Active
+Structural Engineer,5194,CA,Alameda,2008-05-09,2027-12-31,Active
 Structural Engineer,5195,WA,,2008-05-09,2024-06-30,Delinquent
 Structural Engineer,5196,CA,San Francisco,2008-05-09,2027-09-30,Active
 Structural Engineer,5197,NV,,2008-07-31,2027-09-30,Active
@@ -3253,9 +3253,9 @@ Structural Engineer,5571,CA,Sacramento,2011-01-25,2026-12-31,Active
 Structural Engineer,5572,CA,Los Angeles,2011-01-25,2027-06-30,Active
 Structural Engineer,5573,OH,,2011-01-25,2027-09-30,Active
 Structural Engineer,5574,CA,Los Angeles,2011-01-25,2027-12-31,Active
-Structural Engineer,5575,CA,Sacramento,2011-01-25,2027-06-30,Active
+Structural Engineer,5575,CA,Placer,2011-01-25,2027-06-30,Active
 Structural Engineer,5576,CA,Los Angeles,2011-01-25,2026-06-30,Active
-Structural Engineer,5577,CA,Orange,2011-01-25,2025-12-31,Active
+Structural Engineer,5577,CA,Orange,2011-01-25,2027-12-31,Active
 Structural Engineer,5578,CA,Los Angeles,2011-01-25,2027-06-30,Active
 Structural Engineer,5579,CA,Los Angeles,2011-01-25,2027-12-31,Active
 Structural Engineer,5580,CA,San Diego,2011-01-25,2027-12-31,Active
@@ -3303,7 +3303,7 @@ Structural Engineer,5621,MI,,2011-06-27,2026-06-30,Active
 Structural Engineer,5622,WA,,2011-08-09,2026-09-30,Active
 Structural Engineer,5623,TX,,2011-08-09,2027-09-30,Active
 Structural Engineer,5624,WA,,2011-08-09,2024-03-31,Delinquent
-Structural Engineer,5625,OR,,2011-08-23,2025-12-31,Active
+Structural Engineer,5625,OR,,2011-08-23,2027-12-31,Active
 Structural Engineer,5626,WA,,2011-09-19,2027-12-31,Active
 Structural Engineer,5627,CA,Riverside,2011-11-30,2026-06-30,Active
 Structural Engineer,5628,AZ,,2011-11-30,2027-06-30,Active
@@ -3311,7 +3311,7 @@ Structural Engineer,5629,CA,San Diego,2011-11-30,2026-09-30,Active
 Structural Engineer,5630,WA,,2011-11-30,2026-06-30,Active
 Structural Engineer,5631,CA,Sonoma,2011-11-30,2027-12-31,Active
 Structural Engineer,5632,UT,,2011-11-30,2026-06-30,Active
-Structural Engineer,5633,MI,,2011-11-30,2025-12-31,Active
+Structural Engineer,5633,MI,,2011-11-30,2027-12-31,Active
 Structural Engineer,5634,CA,Orange,2011-11-30,2026-06-30,Active
 Structural Engineer,5635,CA,Los Angeles,2011-11-30,2026-06-30,Active
 Structural Engineer,5636,CA,San Francisco,2011-11-30,2026-06-30,Active
@@ -3349,7 +3349,7 @@ Structural Engineer,5667,NV,,2012-01-31,2026-09-30,Active
 Structural Engineer,5668,CA,San Bernardino,2012-01-31,2027-09-30,Active
 Structural Engineer,5669,CA,Santa Clara,2012-01-31,2026-06-30,Active
 Structural Engineer,5670,TX,,2012-01-31,2027-06-30,Active
-Structural Engineer,5671,GA,,2012-01-31,2025-12-31,Active
+Structural Engineer,5671,GA,,2012-01-31,2027-12-31,Active
 Structural Engineer,5672,CA,Butte,2012-01-31,2027-06-30,Active
 Structural Engineer,5673,CA,Alameda,2012-01-31,2026-06-30,Active
 Structural Engineer,5674,CA,Contra Costa,2012-01-31,2026-06-30,Active
@@ -3534,7 +3534,7 @@ Structural Engineer,5852,CA,Orange,2012-12-21,2027-06-30,Active
 Structural Engineer,5853,CA,Los Angeles,2012-12-21,2026-06-30,Active
 Structural Engineer,5854,CA,Los Angeles,2012-12-21,2027-06-30,Active
 Structural Engineer,5855,CA,Contra Costa,2012-12-21,2027-12-31,Active
-Structural Engineer,5856,CA,Los Angeles,2012-12-21,2025-12-31,Active
+Structural Engineer,5856,CA,Los Angeles,2012-12-21,2027-12-31,Active
 Structural Engineer,5857,CO,,2012-12-21,2027-06-30,Active
 Structural Engineer,5858,CA,San Diego,2012-12-21,2027-06-30,Active
 Structural Engineer,5859,CA,Los Angeles,2012-12-21,2027-06-30,Active
@@ -3584,7 +3584,7 @@ Structural Engineer,5902,CA,Marin,2013-06-17,2026-09-30,Active
 Structural Engineer,5903,CA,San Mateo,2013-06-17,2027-06-30,Active
 Structural Engineer,5904,CA,Contra Costa,2013-06-17,2027-06-30,Active
 Structural Engineer,5905,CA,Orange,2013-06-17,2027-12-31,Active
-Structural Engineer,5906,CA,Sacramento,2013-06-17,2025-12-31,Active
+Structural Engineer,5906,CA,Sacramento,2013-06-17,2027-12-31,Active
 Structural Engineer,5907,CA,Los Angeles,2013-06-17,2026-06-30,Active
 Structural Engineer,5908,CA,Los Angeles,2013-06-17,2026-12-31,Active
 Structural Engineer,5909,CA,Orange,2013-06-17,2026-06-30,Active
@@ -3679,13 +3679,13 @@ Structural Engineer,5997,MI,,2013-12-18,2027-09-30,Active
 Structural Engineer,5998,CA,Stanislaus,2013-12-18,2026-09-30,Active
 Structural Engineer,5999,CA,Santa Clara,2013-12-18,2026-06-30,Active
 Structural Engineer,6000,CA,Los Angeles,2013-12-18,2027-06-30,Active
-Structural Engineer,6001,CA,Marin,2013-12-18,2025-12-31,Active
+Structural Engineer,6001,CA,Marin,2013-12-18,2027-12-31,Active
 Structural Engineer,6002,NY,,2013-12-18,2026-09-30,Active
 Structural Engineer,6003,CA,San Mateo,2013-12-18,2026-06-30,Active
 Structural Engineer,6004,CA,Sacramento,2013-12-18,2026-06-30,Active
 Structural Engineer,6005,CA,Orange,2013-12-18,2026-06-30,Active
 Structural Engineer,6006,CA,Los Angeles,2013-12-18,2026-12-31,Active
-Structural Engineer,6007,CA,Los Angeles,2013-12-18,2025-12-31,Active
+Structural Engineer,6007,CA,Los Angeles,2013-12-18,2027-12-31,Active
 Structural Engineer,6008,TN,,2013-12-18,2027-09-30,Active
 Structural Engineer,6009,OR,,2013-12-18,2027-09-30,Active
 Structural Engineer,6010,CA,San Francisco,2013-12-18,2027-06-30,Active
@@ -3703,7 +3703,7 @@ Structural Engineer,6021,CA,San Francisco,2013-12-18,2027-12-31,Active
 Structural Engineer,6022,CA,Alameda,2013-12-18,2026-09-30,Active
 Structural Engineer,6023,CA,Alameda,2013-12-18,2026-06-30,Active
 Structural Engineer,6024,CA,Ventura,2013-12-18,2026-12-31,Active
-Structural Engineer,6025,CA,Los Angeles,2013-12-18,2025-12-31,Active
+Structural Engineer,6025,CA,Los Angeles,2013-12-18,2027-12-31,Active
 Structural Engineer,6026,CA,Stanislaus,2013-12-18,2026-03-31,Active
 Structural Engineer,6027,CA,San Francisco,2013-12-18,2027-12-31,Active
 Structural Engineer,6028,CA,Los Angeles,2013-12-18,2027-06-30,Active
@@ -3738,7 +3738,7 @@ Structural Engineer,6056,ID,,2014-01-21,2026-12-31,Active
 Structural Engineer,6057,OH,,2014-01-21,2026-12-31,Active
 Structural Engineer,6058,DC,,2014-01-21,2027-06-30,Active
 Structural Engineer,6059,MI,,2014-02-04,2027-12-31,Active
-Structural Engineer,6060,OR,,2014-02-04,2025-12-31,Active
+Structural Engineer,6060,OR,,2014-02-04,2027-12-31,Active
 Structural Engineer,6061,TX,,2014-02-04,2027-03-31,Active
 Structural Engineer,6062,OR,,2014-03-03,2026-09-30,Active
 Structural Engineer,6063,CA,San Diego,2014-03-03,2026-06-30,Active
@@ -3817,7 +3817,7 @@ Structural Engineer,6135,TN,,2014-09-10,2027-09-30,Active
 Structural Engineer,6136,MI,,2014-09-23,2026-06-30,Active
 Structural Engineer,6137,AR,,2014-09-23,2026-09-30,Active
 Structural Engineer,6138,TN,,2014-10-09,2027-12-31,Active
-Structural Engineer,6139,IL,,2014-10-23,2025-09-30,Delinquent
+Structural Engineer,6139,IL,,2014-10-23,2027-09-30,Active
 Structural Engineer,6140,CA,Monterey,2014-11-19,2027-12-31,Active
 Structural Engineer,6141,ID,,2014-11-19,2027-09-30,Active
 Structural Engineer,6142,CA,San Francisco,2014-11-19,2026-09-30,Active
@@ -3908,7 +3908,7 @@ Structural Engineer,6226,CA,Los Angeles,2015-06-15,2026-06-30,Active
 Structural Engineer,6227,CA,Los Angeles,2015-06-15,2027-06-30,Active
 Structural Engineer,6228,CA,Los Angeles,2015-06-15,2026-03-31,Active
 Structural Engineer,6229,CA,Contra Costa,2015-06-15,2027-12-31,Active
-Structural Engineer,6230,CA,Los Angeles,2015-06-15,2027-06-30,Active
+Structural Engineer,6230,CA,Orange,2015-06-15,2027-06-30,Active
 Structural Engineer,6231,CA,San Diego,2015-06-15,2027-09-30,Active
 Structural Engineer,6232,CA,Los Angeles,2015-06-15,2026-12-31,Active
 Structural Engineer,6233,CA,Contra Costa,2015-06-15,2027-09-30,Active
@@ -3970,7 +3970,7 @@ Structural Engineer,6288,CA,Ventura,2015-12-15,2026-06-30,Active
 Structural Engineer,6289,CA,Sacramento,2015-12-15,2026-03-31,Active
 Structural Engineer,6290,CA,Sacramento,2015-12-15,2027-09-30,Active
 Structural Engineer,6291,CA,Los Angeles,2015-12-15,2026-03-31,Active
-Structural Engineer,6292,CA,Santa Clara,2015-12-15,2026-03-31,Active
+Structural Engineer,6292,CA,Santa Clara,2015-12-15,2028-03-31,Active
 Structural Engineer,6293,CA,San Luis Obispo,2015-12-15,2026-03-31,Active
 Structural Engineer,6294,CA,Santa Clara,2015-12-15,2026-06-30,Active
 Structural Engineer,6295,CA,San Francisco,2015-12-15,2026-06-30,Active
@@ -3990,7 +3990,7 @@ Structural Engineer,6308,CA,Kern,2015-12-29,2027-12-31,Active
 Structural Engineer,6309,WA,,2016-02-11,2027-12-31,Active
 Structural Engineer,6310,UT,,2016-02-11,2026-06-30,Active
 Structural Engineer,6311,UT,,2015-10-27,2027-03-31,Active
-Structural Engineer,6312,CA,Los Angeles,2016-02-25,2025-12-31,Active
+Structural Engineer,6312,CA,Los Angeles,2016-02-25,2027-12-31,Active
 Structural Engineer,6313,WA,,2016-02-25,2027-06-30,Active
 Structural Engineer,6314,CA,Los Angeles,2016-02-25,2026-09-30,Active
 Structural Engineer,6315,WA,,2016-03-25,2027-12-31,Active
@@ -4107,7 +4107,7 @@ Structural Engineer,6425,CA,Los Angeles,2016-12-15,2027-03-31,Active
 Structural Engineer,6426,CA,Alameda,2016-12-15,2026-09-30,Active
 Structural Engineer,6427,CA,San Francisco,2016-12-15,2027-03-31,Active
 Structural Engineer,6428,CA,San Francisco,2016-12-15,2027-03-31,Active
-Structural Engineer,6429,CA,Los Angeles,2016-12-15,2026-09-30,Active
+Structural Engineer,6429,CA,Orange,2016-12-15,2026-09-30,Active
 Structural Engineer,6430,CA,Los Angeles,2016-12-15,2027-12-31,Active
 Structural Engineer,6431,CA,Los Angeles,2016-12-15,2027-09-30,Active
 Structural Engineer,6432,CA,Ventura,2016-12-15,2027-09-30,Active
@@ -4170,7 +4170,7 @@ Structural Engineer,6488,CA,San Luis Obispo,2017-06-13,2026-03-31,Active
 Structural Engineer,6489,FL,,2017-06-13,2027-06-30,Active
 Structural Engineer,6490,CA,San Mateo,2017-06-13,2027-09-30,Active
 Structural Engineer,6491,CA,Orange,2017-06-13,2026-03-31,Active
-Structural Engineer,6492,CA,Orange,2017-06-13,2026-03-31,Active
+Structural Engineer,6492,CA,Orange,2017-06-13,2028-03-31,Active
 Structural Engineer,6493,CA,Los Angeles,2017-06-13,2027-09-30,Active
 Structural Engineer,6494,CA,Contra Costa,2017-06-13,2027-09-30,Active
 Structural Engineer,6495,CA,Riverside,2017-06-13,2027-09-30,Active
@@ -4330,7 +4330,7 @@ Structural Engineer,6648,CA,Sonoma,2018-12-21,2027-09-30,Active
 Structural Engineer,6649,CA,Los Angeles,2018-12-21,2027-09-30,Active
 Structural Engineer,6650,CA,Los Angeles,2018-12-21,2027-09-30,Active
 Structural Engineer,6651,CA,Tulare,2018-12-21,2027-09-30,Active
-Structural Engineer,6652,CA,Sacramento,2018-12-21,2025-12-31,Active
+Structural Engineer,6652,CA,Sacramento,2018-12-21,2025-12-31,Delinquent
 Structural Engineer,6653,CA,Los Angeles,2018-12-21,2027-03-31,Active
 Structural Engineer,6654,CA,Orange,2018-12-21,2026-09-30,Active
 Structural Engineer,6655,CA,Santa Clara,2018-12-21,2027-03-31,Active
@@ -4401,7 +4401,7 @@ Structural Engineer,6719,WA,,2019-06-21,2027-09-30,Active
 Structural Engineer,6720,CA,San Francisco,2019-06-21,2027-03-31,Active
 Structural Engineer,6721,CA,San Francisco,2019-06-21,2026-03-31,Active
 Structural Engineer,6722,CA,Los Angeles,2019-06-21,2026-12-31,Active
-Structural Engineer,6723,CA,Contra Costa,2019-06-21,2026-03-31,Active
+Structural Engineer,6723,CA,Contra Costa,2019-06-21,2028-03-31,Active
 Structural Engineer,6724,CA,San Diego,2019-06-21,2027-09-30,Active
 Structural Engineer,6725,CA,San Mateo,2019-06-21,2026-09-30,Active
 Structural Engineer,6726,CA,Los Angeles,2019-06-21,2027-03-31,Active
@@ -4461,7 +4461,7 @@ Structural Engineer,6779,CA,Contra Costa,2019-12-20,2027-09-30,Active
 Structural Engineer,6780,CA,San Francisco,2019-12-20,2026-03-31,Active
 Structural Engineer,6781,CA,San Francisco,2019-12-20,2027-09-30,Active
 Structural Engineer,6782,CA,Los Angeles,2019-12-20,2027-09-30,Active
-Structural Engineer,6783,CA,Fresno,2019-12-20,2026-03-31,Active
+Structural Engineer,6783,CA,Fresno,2019-12-20,2028-03-31,Active
 Structural Engineer,6784,CA,San Diego,2019-12-20,2026-03-31,Active
 Structural Engineer,6785,CA,Orange,2019-12-20,2026-03-31,Active
 Structural Engineer,6786,CA,Los Angeles,2019-12-20,2027-09-30,Active
@@ -4705,7 +4705,7 @@ Structural Engineer,7023,TX,,2022-03-18,2027-03-31,Active
 Structural Engineer,7024,CA,San Bernardino,2022-03-18,2026-12-31,Active
 Structural Engineer,7025,CA,Los Angeles,2022-03-18,2026-12-31,Active
 Structural Engineer,7026,NY,,2022-04-01,2026-03-31,Active
-Structural Engineer,7027,PR,,2022-04-01,2026-03-31,Active
+Structural Engineer,7027,PR,,2022-04-01,2028-03-31,Active
 Structural Engineer,7028,CA,Orange,2022-04-15,2027-06-30,Active
 Structural Engineer,7029,CA,San Diego,2022-04-15,2026-09-30,Active
 Structural Engineer,7030,CA,Sacramento,2022-05-13,2026-03-31,Active
@@ -4715,7 +4715,7 @@ Structural Engineer,7033,MO,,2022-05-20,2027-06-30,Active
 Structural Engineer,7034,,,2022-06-17,2026-06-30,Active
 Structural Engineer,7035,CA,San Francisco,2022-06-17,2026-12-31,Active
 Structural Engineer,7036,CA,Marin,2022-06-17,2027-06-30,Active
-Structural Engineer,7037,VA,,2022-06-17,2025-12-31,Active
+Structural Engineer,7037,VA,,2022-06-17,2025-12-31,Delinquent
 Structural Engineer,7038,CA,Placer,2022-06-17,2027-03-31,Active
 Structural Engineer,7039,CA,Sacramento,2022-06-17,2026-03-31,Active
 Structural Engineer,7040,CA,Los Angeles,2022-06-17,2027-03-31,Active
@@ -4959,14 +4959,14 @@ Structural Engineer,7277,CA,Orange,2023-12-13,2027-09-30,Active
 Structural Engineer,7278,CA,Los Angeles,2023-12-13,2026-09-30,Active
 Structural Engineer,7279,CA,Santa Clara,2023-12-13,2027-12-31,Active
 Structural Engineer,7280,CO,,2023-12-13,2026-09-30,Active
-Structural Engineer,7281,CA,Los Angeles,2023-12-13,2026-03-31,Active
+Structural Engineer,7281,CA,Los Angeles,2023-12-13,2028-03-31,Active
 Structural Engineer,7282,CA,Alameda,2023-12-13,2026-12-31,Active
 Structural Engineer,7283,CA,Los Angeles,2023-12-13,2026-03-31,Active
 Structural Engineer,7284,IL,,2023-12-13,2026-03-31,Active
 Structural Engineer,7285,CA,San Diego,2023-12-13,2026-06-30,Active
 Structural Engineer,7286,CA,Santa Clara,2023-12-13,2026-06-30,Active
 Structural Engineer,7287,CA,Los Angeles,2023-12-22,2026-03-31,Active
-Structural Engineer,7288,CA,San Mateo,2024-01-19,2025-12-31,Active
+Structural Engineer,7288,CA,San Mateo,2024-01-19,2025-12-31,Delinquent
 Structural Engineer,7289,OR,,2024-02-16,2027-06-30,Active
 Structural Engineer,7290,WA,,2024-02-16,2027-03-31,Active
 Structural Engineer,7291,TX,,2024-02-16,2026-12-31,Active
@@ -5026,7 +5026,7 @@ Structural Engineer,7344,CA,Los Angeles,2024-10-18,2027-12-31,Active
 Structural Engineer,7345,MN,,2024-10-18,2026-12-31,Active
 Structural Engineer,7346,OH,,2024-10-25,2026-09-30,Active
 Structural Engineer,7347,WI,,2024-11-01,2026-09-30,Active
-Structural Engineer,7348,CA,Orange,2024-11-01,2026-09-30,Active
+Structural Engineer,7348,CA,Los Angeles,2024-11-01,2026-09-30,Active
 Structural Engineer,7349,TX,,2024-11-01,2026-12-31,Active
 Structural Engineer,7350,GA,,2024-11-01,2026-12-31,Active
 Structural Engineer,7351,WA,,2024-11-01,2027-12-31,Active
@@ -5099,3 +5099,7 @@ Structural Engineer,7417,IN,,2025-10-11,2026-12-31,Active
 Structural Engineer,7418,OR,,2025-12-05,2026-03-31,Active
 Structural Engineer,7419,OR,,2025-12-05,2027-09-30,Active
 Structural Engineer,7420,CA,Orange,2025-12-05,2026-12-31,Active
+Structural Engineer,7421,CA,San Joaquin,2026-01-02,2026-03-31,Active
+Structural Engineer,7422,CA,Fresno,2026-01-02,2026-09-30,Active
+Structural Engineer,7423,TX,,2026-01-23,2027-12-31,Active
+Structural Engineer,7424,NV,,2026-01-30,2027-12-31,Active
