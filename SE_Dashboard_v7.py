@@ -14,7 +14,6 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 import re
 from typing import Optional
 
@@ -487,10 +486,6 @@ def create_visualizations(filtered_df, show_events: bool, start_year: Optional[i
     plot_time_series(filtered_df, bucket_size, lock_y, events_df=events_df, show_events=show_events, start_year=start_year, end_year=end_year, comparison_state=comparison_state, full_df=full_df)
     # Line chart variant
     plot_time_series_line(filtered_df, bucket_size, lock_y, events_df=events_df, show_events=show_events, start_year=start_year, end_year=end_year)
-    st.markdown("---")
-
-    # Year-over-year comparison
-    plot_yoy_comparison(filtered_df, start_year=start_year, end_year=end_year)
     st.markdown("---")
 
     # Yearly retirements
@@ -1129,83 +1124,6 @@ def plot_ca_county_map(filtered_df):
 
     if unmapped:
         st.caption(f"Unmapped county values (not shown on map): {', '.join(unmapped)}")
-
-
-# ---------- Year-over-year comparison ----------
-
-def plot_yoy_comparison(filtered_df, start_year=None, end_year=None):
-    """Dual-axis chart: absolute issuance counts (bars) + YoY % change (line)."""
-    st.subheader("📊 Year-over-Year Comparison")
-
-    if 'Original Issue Date' not in filtered_df.columns:
-        st.info("Original Issue Date column not available.")
-        return
-    if not pd.api.types.is_datetime64_any_dtype(filtered_df['Original Issue Date']):
-        st.info("Original Issue Date is not in datetime format.")
-        return
-
-    df = filtered_df.dropna(subset=['Original Issue Date']).copy()
-    df['Year'] = df['Original Issue Date'].dt.year.astype(int)
-    yearly = df.groupby('Year').size().reset_index(name='Count')
-    yearly = yearly.sort_values('Year')
-
-    # Fill year gaps so the chart is continuous
-    if start_year is not None and end_year is not None:
-        full_years = pd.DataFrame({'Year': range(int(start_year), int(end_year) + 1)})
-        yearly = full_years.merge(yearly, on='Year', how='left').fillna(0)
-        yearly['Count'] = yearly['Count'].astype(int)
-
-    if len(yearly) < 2:
-        st.info("Need at least two years of data for year-over-year comparison.")
-        return
-
-    yearly['Change'] = yearly['Count'].diff()
-    yearly['Pct_Change'] = yearly['Count'].pct_change() * 100
-
-    fig = make_subplots(specs=[[{"secondary_y": True}]])
-
-    fig.add_trace(go.Bar(
-        x=yearly['Year'], y=yearly['Count'],
-        name='Licenses Issued', marker_color='steelblue',
-        text=yearly['Count'], textposition='outside',
-        hovertemplate='<b>%{x}</b><br>Issued: %{y}<extra></extra>'
-    ), secondary_y=False)
-
-    # YoY % change line (skip first year — no prior year to compare)
-    yoy = yearly.iloc[1:].copy()
-    fig.add_trace(go.Scatter(
-        x=yoy['Year'], y=yoy['Pct_Change'],
-        name='YoY Change %', mode='lines+markers',
-        line=dict(color='darkorange', width=2),
-        marker=dict(size=6),
-        hovertemplate='<b>%{x}</b><br>Change: %{y:+.1f}%<extra></extra>'
-    ), secondary_y=True)
-
-    fig.update_layout(
-        title="Year-over-Year License Issuance Comparison",
-        xaxis_title="Year",
-        height=500,
-        hovermode='x unified',
-        legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1)
-    )
-    fig.update_yaxes(title_text="Licenses Issued", secondary_y=False)
-    fig.update_yaxes(title_text="YoY Change (%)", secondary_y=True,
-                     zeroline=True, zerolinecolor="lightgray")
-
-    st.plotly_chart(fig, use_container_width=True)
-
-    with st.expander("📊 Growth Statistics"):
-        valid_pct = yearly['Pct_Change'].dropna()
-        c1, c2, c3, c4 = st.columns(4)
-        with c1:
-            st.metric("Avg Growth Rate", f"{valid_pct.mean():+.1f}%")
-        with c2:
-            best_idx = yearly['Count'].idxmax()
-            st.metric("Best Year", int(yearly.loc[best_idx, 'Year']))
-        with c3:
-            st.metric("Best Year Count", int(yearly['Count'].max()))
-        with c4:
-            st.metric("Total Licenses", f"{int(yearly['Count'].sum()):,}")
 
 
 # ---------- Yearly retirements (expirations) ----------
