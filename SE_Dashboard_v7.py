@@ -18,11 +18,20 @@ import re
 from typing import Optional
 
 # ---------- Data loading ----------
-@st.cache_data
-def load_cleaned_data(src):
+def _file_hash(src):
+    """Return file modification time as a cache-busting key, or None for URLs."""
+    p = Path(src)
+    if p.exists():
+        return p.stat().st_mtime
+    return None
+
+
+@st.cache_data(ttl=3600)
+def load_cleaned_data(src, _file_mtime=None):
     """
     Load pre-cleaned CSV data with caching for better performance.
     `src` can be a local path or a URL.
+    `_file_mtime` is used only to bust the cache when the file changes on disk.
     """
     try:
         df = pd.read_csv(src)
@@ -1290,7 +1299,7 @@ def main():
     df = None
     if src:
         with st.spinner("Loading cleaned data..."):
-            df = load_cleaned_data(src)
+            df = load_cleaned_data(src, _file_mtime=_file_hash(src))
             # Ensure date columns are parsed consistently for the rest of the app
             df = parse_dates(df)
             if df is not None:
