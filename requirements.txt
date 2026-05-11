@@ -3,3 +3,4 @@ pandas
 plotly>=5.0.0
 openpyxl
 xlrd
+pytest

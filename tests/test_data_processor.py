@@ -4,13 +4,19 @@
 import sys
 from pathlib import Path
 
-# Add project root and Offline Processing to path
+# Add project root and Offline Processing to path. The latter is gitignored, so
+# importorskip below cleanly skips this whole module on a fresh clone where it
+# isn't present.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'Offline Processing'))
 
 import pandas as pd
 import pytest
 
+pytest.importorskip(
+    "SE_Data_Process_V9",
+    reason="Offline Processing module not present (gitignored)",
+)
 from SE_Data_Process_V9 import (
     _sanitize_excel_string,
     clean_df_for_excel,

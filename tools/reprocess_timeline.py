@@ -3,8 +3,9 @@ from pathlib import Path
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE_TABLE = ROOT / 'License History Table.csv'
-DST = ROOT / 'timeline_events.csv'
+DATA_DIR = ROOT / 'data'
+SOURCE_TABLE = DATA_DIR / 'License History Table.csv'
+DST = DATA_DIR / 'timeline_events.csv'
 
 if not SOURCE_TABLE.exists():
     raise SystemExit(f"Source file not found: {SOURCE_TABLE}")

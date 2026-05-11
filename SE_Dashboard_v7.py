@@ -17,6 +17,38 @@ import plotly.graph_objects as go
 import re
 from typing import Optional
 
+from dashboard_lib.timeline import (
+    load_timeline_events,
+    format_event_description,
+    build_event_description_from_fields,
+    render_event_descriptions,
+    _sanitize_hover,
+    _wrap_words,
+    _wrap_field,
+)
+from dashboard_lib.periods import (
+    _assign_period,
+    _build_full_index,
+    _count_by_period,
+    to_bucket_label,
+)
+from dashboard_lib.geo import (
+    US_STATE_TO_ABBREV,
+    CA_COUNTY_FIPS,
+    to_state_code,
+    to_county_fips,
+)
+
+# ---------- Visual constants ----------
+US_MAP_ZMAX = 300
+EVENT_TYPE_PALETTE = ['crimson', 'darkorange', 'seagreen', 'mediumpurple', 'teal', 'goldenrod']
+MAIN_BAR_COLOR = 'steelblue'
+COMPARISON_BAR_COLOR = 'coral'
+EXPIRATION_BAR_COLOR = 'indianred'
+ACTIVE_LINE_COLOR = 'seagreen'
+STATE_BAR_COLOR = 'lightcoral'
+EVENT_MARKER_COLOR = 'crimson'
+
 # ---------- Data loading ----------
 def _file_hash(src):
     """Return file modification time as a cache-busting key, or None for URLs."""
@@ -83,222 +115,29 @@ def resolve_data_source(default_local_filename: str):
         "ProfEngrsLandSurvyrsGeologist_Data00_structural_engineers_cleaned.csv"
     ]
 
-    # Use script directory for more reliable path resolution on Streamlit Cloud
+    # Search data/ first, then project root for backwards compatibility.
     current_dir = Path(__file__).parent if '__file__' in globals() else Path.cwd()
-    
-    # First try the specific filenames we know
-    for filename in possible_files:
-        local_csv_path = current_dir / filename
-        if local_csv_path.exists():
-            return str(local_csv_path)
+    search_dirs = [current_dir / 'data', current_dir]
 
-    # Look for CSV files with required license columns (not timeline or other data)
-    csv_files = list(current_dir.glob("*.csv"))
-    for csv_path in csv_files:
-        # Skip known non-license files
-        if csv_path.name.lower() in ['timeline_events.csv', 'license history table.csv']:
-            continue
-        # Check if it has license data columns
-        try:
-            sample_df = pd.read_csv(csv_path, nrows=1)
-            if 'License Type' in sample_df.columns or 'License Number' in sample_df.columns:
-                return str(csv_path)
-        except Exception:
-            continue
+    for d in search_dirs:
+        for filename in possible_files:
+            local_csv_path = d / filename
+            if local_csv_path.exists():
+                return str(local_csv_path)
+
+    # Fallback: look for any CSV with required license columns.
+    for d in search_dirs:
+        for csv_path in d.glob("*.csv"):
+            if csv_path.name.lower() in ['timeline_events.csv', 'license history table.csv']:
+                continue
+            try:
+                sample_df = pd.read_csv(csv_path, nrows=1)
+                if 'License Type' in sample_df.columns or 'License Number' in sample_df.columns:
+                    return str(csv_path)
+            except Exception:
+                continue
 
     return None
-
-# ---------- Optional timeline events (for chart annotations) ----------
-@st.cache_data
-def load_timeline_events() -> Optional[pd.DataFrame]:
-    """
-    Load optional timeline events used to annotate time-series charts.
-    Supported locations (in priority order):
-    - st.secrets['EVENTS_PATH'] or st.secrets['EVENTS_URL']
-    - ./timeline_events.csv
-    - ./data/timeline_events.csv
-
-    Expected columns (case-insensitive):
-    - start_date (required)
-    - end_date (optional)
-    - label (short title shown on chart)
-    - description (longer hover text)
-    - type (category for coloring/filtering)
-    """
-    # Try secrets first
-    try:
-        if 'EVENTS_PATH' in st.secrets:
-            df = pd.read_csv(st.secrets['EVENTS_PATH'])
-        elif 'EVENTS_URL' in st.secrets:
-            df = pd.read_csv(st.secrets['EVENTS_URL'])
-        else:
-            df = None
-    except Exception:
-        df = None
-
-    # Fallbacks in repo
-    if df is None:
-        # Use script directory for reliable path resolution
-        script_dir = Path(__file__).parent if '__file__' in globals() else Path.cwd()
-        for candidate in [
-            script_dir / 'timeline_events.csv',
-            script_dir / 'data' / 'timeline_events.csv',
-        ]:
-            if candidate.exists():
-                try:
-                    df = pd.read_csv(candidate)
-                    break
-                except Exception:
-                    pass
-
-    if df is None:
-        return None
-
-    # Normalize columns
-    cols = {c.lower().strip(): c for c in df.columns}
-    def col(name):
-        # Return actual column name matching a case-insensitive key
-        for k, v in cols.items():
-            if k == name:
-                return v
-        return None
-
-    s_col = col('start_date') or col('start') or col('date')
-    e_col = col('end_date') or col('end')
-    l_col = col('label') or col('title')
-    d_col = col('description') or col('details')
-    code_col = col('code') or col('codes')
-    fmt_col = col('format')
-    notes_col = col('notes')
-    t_col = col('type') or col('category')
-
-    if not s_col:
-        return None
-
-    # Build normalized frame
-    out = pd.DataFrame()
-    out['start_date'] = pd.to_datetime(df[s_col], errors='coerce')
-    if e_col and e_col in df.columns:
-        out['end_date'] = pd.to_datetime(df[e_col], errors='coerce')
-    else:
-        out['end_date'] = pd.NaT
-    out['label'] = df[l_col] if l_col in df.columns else ''
-    out['type'] = df[t_col] if t_col in df.columns else 'Event'
-
-    # Prefer structured fields if present; else try to parse description
-    if any(x in df.columns for x in filter(None, [code_col, fmt_col, notes_col])):
-        out['code'] = df[code_col] if code_col in df.columns else ''
-        out['format'] = df[fmt_col] if fmt_col in df.columns else ''
-        out['notes'] = df[notes_col] if notes_col in df.columns else ''
-        # Also provide a combined description for legacy callers
-        out['description'] = (
-            'Codes: ' + out['code'].fillna('') + '\n' +
-            'Format: ' + out['format'].fillna('') + '\n' +
-            'Notes: ' + out['notes'].fillna('')
-        ).str.strip()
-    else:
-        # Keep original description, but try splitting into fields for downstream formatting
-        desc_series = df[d_col] if d_col in df.columns else pd.Series([''] * len(df))
-        out['description'] = desc_series
-        # Quick token extraction for code/format/notes within single description text
-        def extract_token(s: str, token: str):
-            if not isinstance(s, str):
-                return ''
-            # Capture text after token label until next token or end
-            pattern = re.compile(rf"{token}\s*(.*?)(?:(?:\n|\r)\s*(Codes:|Format:|Notes:)|$)", re.IGNORECASE | re.DOTALL)
-            m = pattern.search(s)
-            if not m:
-                return ''
-            return m.group(1).strip()
-
-        out['code'] = desc_series.apply(lambda x: extract_token(x, 'Codes:'))
-        out['format'] = desc_series.apply(lambda x: extract_token(x, 'Format:'))
-        out['notes'] = desc_series.apply(lambda x: extract_token(x, 'Notes:'))
-
-    # Drop rows without valid start dates
-    out = out.dropna(subset=['start_date']).reset_index(drop=True)
-    return out
-
-# ---------- Helpers ----------
-def _sanitize_hover(text: str) -> str:
-    """Escape characters that can interfere with Plotly's hover template parsing."""
-    if text is None:
-        return ''
-    # Escape braces which Plotly might try to interpret
-    return str(text).replace('{', '&#123;').replace('}', '&#125;')
-
-def _wrap_words(words, width: int, first_prefix: str = '', subsequent_prefix: str = '  ') -> list:
-    """Greedy word wrap returning list of lines with given width constraints."""
-    lines = []
-    current = first_prefix.rstrip()
-    for w in words:
-        w = w.strip()
-        if not w:
-            continue
-        if not current:
-            current = first_prefix.rstrip()
-        tentative = (current + ' ' + w).strip() if current else w
-        if len(tentative) > width and current:
-            lines.append(current)
-            current = f"{subsequent_prefix}{w}".rstrip()
-        else:
-            current = tentative
-    if current:
-        lines.append(current)
-    return lines
-
-def _wrap_field(label: str, content: str, width: int = 55) -> str:
-    """Wrap a single field (label + content) producing <br>-joined lines."""
-    if content is None:
-        return ''
-    txt = str(content).strip()
-    if not txt:
-        return ''
-    words = txt.replace('\r\n', ' ').replace('\n', ' ').split()
-    lines = _wrap_words(words, width=width, first_prefix=f"{label} ", subsequent_prefix='  ')
-    return '<br>'.join(_sanitize_hover(l) for l in lines)
-
-def _wrap_legacy(raw: str, width: int = 55) -> str:
-    """Wrap a legacy combined description string by detecting tokens and wrapping segments."""
-    if raw is None:
-        return ''
-    s = str(raw).strip()
-    if not s:
-        return ''
-    tokens = ['Codes:', 'Format:', 'Breadth:', 'Depth:', 'Notes:', 'Vertical:', 'Lateral:', 'Updated:', 'Components:']
-    # Ensure each token starts new line for splitting
-    for tok in tokens:
-        s = re.sub(rf'(?<!^)\s*{re.escape(tok)}', f'\n{tok}', s)
-    segments = []
-    for seg in s.split('\n'):
-        seg = seg.strip()
-        if not seg:
-            continue
-        # Find label if present
-        m = re.match(r'^(\w+:)\s*(.*)$', seg)
-        if m:
-            label, content = m.group(1), m.group(2)
-            segments.append(_wrap_field(label, content, width=width))
-        else:
-            # Generic wrapping
-            words = seg.split()
-            lines = _wrap_words(words, width=width, first_prefix='', subsequent_prefix='  ')
-            segments.append('<br>'.join(_sanitize_hover(l) for l in lines))
-    return '<br>'.join(segments)
-
-def format_event_description(desc: str) -> str:
-    """Public interface for wrapping legacy description strings into hover-friendly HTML."""
-    return _wrap_legacy(desc, width=55)
-
-def build_event_description_from_fields(code: str, fmt: str, notes: str) -> str:
-    parts = []
-    if code and str(code).strip():
-        parts.append(_wrap_field('Codes:', code, width=55))
-    if fmt and str(fmt).strip():
-        parts.append(_wrap_field('Format:', fmt, width=55))
-    if notes and str(notes).strip():
-        parts.append(_wrap_field('Notes:', notes, width=55))
-    return '<br>'.join(parts)
 
 # ---------- URL query-param helpers ----------
 
@@ -494,7 +333,7 @@ def create_visualizations(filtered_df, show_events: bool, start_year: Optional[i
     # Time series
     plot_time_series(filtered_df, bucket_size, lock_y, events_df=events_df, show_events=show_events, start_year=start_year, end_year=end_year, comparison_state=comparison_state, full_df=full_df)
     # Line chart variant
-    plot_time_series_line(filtered_df, bucket_size, lock_y, events_df=events_df, show_events=show_events, start_year=start_year, end_year=end_year)
+    plot_time_series_line(filtered_df, lock_y, events_df=events_df, show_events=show_events, start_year=start_year, end_year=end_year)
     st.markdown("---")
 
     # Yearly retirements
@@ -526,51 +365,6 @@ def create_visualizations(filtered_df, show_events: bool, start_year: Optional[i
         st.markdown("---")
 
 
-def _assign_period(df, bucket_size: str):
-    """Assign a 'Period' column to df based on the selected bucket size. Returns the modified df."""
-    if bucket_size == "Yearly":
-        df['Period'] = df['Original Issue Date'].dt.to_period('Y')
-    elif bucket_size == "Half-Yearly":
-        df['Year'] = df['Original Issue Date'].dt.year
-        df['Half'] = ((df['Original Issue Date'].dt.month - 1) // 6) + 1
-        df['Period'] = df['Year'].astype(str) + '-H' + df['Half'].astype(str)
-    elif bucket_size == "Monthly":
-        df['Period'] = df['Original Issue Date'].dt.to_period('M')
-    else:  # Quarterly
-        df['Period'] = df['Original Issue Date'].dt.to_period('Q')
-    return df
-
-
-def _build_full_index(bucket_size: str, start_year: Optional[int], end_year: Optional[int]):
-    """Build a full period index to fill empty buckets, or None if years not specified."""
-    if start_year is None or end_year is None:
-        return None
-    start = f"{int(start_year)}-01-01"
-    end = f"{int(end_year)}-12-31"
-    if bucket_size == "Yearly":
-        return pd.period_range(start=start, end=end, freq='Y')
-    elif bucket_size == "Monthly":
-        return pd.period_range(start=start, end=end, freq='M')
-    elif bucket_size == "Half-Yearly":
-        labels = []
-        for y in range(int(start_year), int(end_year) + 1):
-            labels.append(f"{y}-H1")
-            labels.append(f"{y}-H2")
-        return labels
-    else:  # Quarterly
-        return pd.period_range(start=start, end=end, freq='Q')
-
-
-def _count_by_period(df, bucket_size: str, start_year: Optional[int], end_year: Optional[int]):
-    """Assign periods, group, reindex to fill gaps, and return sorted counts."""
-    df = _assign_period(df.copy(), bucket_size)
-    counts = df.groupby('Period').size()
-    full_index = _build_full_index(bucket_size, start_year, end_year)
-    if full_index is not None:
-        counts = counts.reindex(full_index, fill_value=0)
-    return counts.sort_index()
-
-
 def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_df: Optional[pd.DataFrame] = None, show_events: bool = False, start_year: Optional[int] = None, end_year: Optional[int] = None, comparison_state: str = None, full_df = None):
     if 'Original Issue Date' not in filtered_df.columns or not pd.api.types.is_datetime64_any_dtype(filtered_df['Original Issue Date']):
         st.info("Original Issue Date column not found or not datetime.")
@@ -587,7 +381,7 @@ def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_
         x=[str(p) for p in license_counts.index],
         y=license_counts.values,
         name='Main Data',
-        marker_color='steelblue',
+        marker_color=MAIN_BAR_COLOR,
         text=license_counts.values,
         textposition='outside',
         hovertemplate='<b>Period:</b> %{x}<br><b>Licenses:</b> %{y}<extra></extra>'
@@ -609,7 +403,7 @@ def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_
             x=[str(p) for p in comp_counts.index],
             y=comp_counts.values,
             name=f'{comparison_state} (Comparison)',
-            marker_color='coral',
+            marker_color=COMPARISON_BAR_COLOR,
             text=comp_counts.values,
             textposition='outside',
             opacity=0.7,
@@ -644,27 +438,11 @@ def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_
 
     # Overlay timeline events as markers aligned to the current bucket
     if show_events and (events_df is not None) and (not events_df.empty):
-        # Map event start dates to the current bucket label used on x-axis
-        def to_bucket_label(dt):
-            if pd.isna(dt):
-                return None
-            if bucket_size == 'Yearly':
-                return str(pd.Period(dt, 'Y'))
-            if bucket_size == 'Half-Yearly':
-                year = dt.year
-                half = 1 if dt.month <= 6 else 2
-                return f"{year}-H{half}"
-            if bucket_size == 'Quarterly':
-                return str(pd.Period(dt, 'Q'))
-            if bucket_size == 'Monthly':
-                return str(pd.Period(dt, 'M'))
-            return None
-
         ev = events_df.copy()
         # Restrict events to selected year range if provided
         if start_year is not None and end_year is not None:
             ev = ev[(ev['start_date'].dt.year >= start_year) & (ev['start_date'].dt.year <= end_year)]
-        ev['bucket'] = ev['start_date'].apply(to_bucket_label)
+        ev['bucket'] = ev['start_date'].apply(lambda dt: to_bucket_label(dt, bucket_size))
         ev = ev.dropna(subset=['bucket'])
         # Only keep events whose bucket exists in the data categories so axis isn't extended by events
         ev = ev[ev['bucket'].isin(categories)]
@@ -678,27 +456,17 @@ def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_
             # Year-only text in red; full details in hover
             text_year = ev['start_date'].dt.year.astype('Int64').astype(str).fillna('')
 
-            # Prefer structured fields if present
-            if all(col in ev.columns for col in ['code', 'format', 'notes']):
-                ev_desc = [
-                    build_event_description_from_fields(c, f, n)
-                    for c, f, n in zip(ev['code'].fillna(''), ev['format'].fillna(''), ev['notes'].fillna(''))
-                ]
-            else:
-                ev_desc = ev['description'].fillna('').map(format_event_description)
-            # Ensure Series type for concat
-            if not isinstance(ev_desc, pd.Series):
-                ev_desc = pd.Series(ev_desc, index=ev.index)
+            ev_desc = render_event_descriptions(ev)
 
             fig.add_trace(go.Scatter(
                 x=ev['bucket'],
                 y=[-pad * 0.8] * len(ev),
                 mode='markers+text',
                 name='Events',
-                marker=dict(symbol='triangle-up', size=10, color='crimson'),
+                marker=dict(symbol='triangle-up', size=10, color=EVENT_MARKER_COLOR),
                 text=text_year,
                 textposition='bottom center',
-                textfont=dict(color='crimson'),
+                textfont=dict(color=EVENT_MARKER_COLOR),
                 hovertemplate=(
                     '<b>%{customdata[0]}</b><br>'  # label
                     'Date: %{customdata[1]}<br>'
@@ -722,10 +490,10 @@ def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_
         with c3: st.metric("Average per Period", f"{license_counts.mean():.1f}")
 
 
-def plot_time_series_line(filtered_df, bucket_size: str, lock_y: bool = True, events_df: Optional[pd.DataFrame] = None, show_events: bool = False, start_year: Optional[int] = None, end_year: Optional[int] = None):
+def plot_time_series_line(filtered_df, lock_y: bool = True, events_df: Optional[pd.DataFrame] = None, show_events: bool = False, start_year: Optional[int] = None, end_year: Optional[int] = None):
     """
-    Line chart of licenses over time. X axis is a datetime representing the start of the
-    selected period (year/half/quarter/month) and Y is the number of licenses issued.
+    Line chart of licenses over time. X axis is the Original Issue Date and Y is
+    either the license number (when available) or a cumulative index.
     """
     # New behavior: plot each individual license by its Original Issue Date on the X axis
     # and the cumulative license count on the Y axis so the line monotonically increases.
@@ -771,7 +539,7 @@ def plot_time_series_line(filtered_df, bucket_size: str, lock_y: bool = True, ev
         y=yvals,
         mode='lines+markers',
         name='Licenses',
-        line=dict(color='steelblue'),
+        line=dict(color=MAIN_BAR_COLOR),
         marker=dict(size=4),
         hovertemplate='<b>Date:</b> %{x|%Y-%m-%d}<br><b>Value:</b> %{y}<extra></extra>'
     ))
@@ -803,9 +571,8 @@ def plot_time_series_line(filtered_df, bucket_size: str, lock_y: bool = True, ev
     if show_events and (events_df is not None) and (not events_df.empty):
         # Create consistent colors by event type
         type_styles = {}
-        palette = ['crimson', 'darkorange', 'seagreen', 'mediumpurple', 'teal', 'goldenrod']
         for i, t in enumerate(events_df['type'].astype(str).unique()):
-            type_styles[t] = dict(color=palette[i % len(palette)], dash='dot')
+            type_styles[t] = dict(color=EVENT_TYPE_PALETTE[i % len(EVENT_TYPE_PALETTE)], dash='dot')
 
         # Reserve headroom for year labels
         y_max = float(pd.Series(yvals).max()) if len(yvals) else 0.0
@@ -821,18 +588,8 @@ def plot_time_series_line(filtered_df, bucket_size: str, lock_y: bool = True, ev
         if start_year is not None and end_year is not None:
             ev = ev[(ev['start_date'].dt.year >= start_year) & (ev['start_date'].dt.year <= end_year)]
         if not ev.empty:
-            # Add all invisible markers at a fixed y just above the line to enable hover
-            # Prefer structured fields if present
-            if all(col in ev.columns for col in ['code', 'format', 'notes']):
-                ev_desc = [
-                    build_event_description_from_fields(c, f, n)
-                    for c, f, n in zip(ev['code'].fillna(''), ev['format'].fillna(''), ev['notes'].fillna(''))
-                ]
-            else:
-                ev_desc = ev['description'].fillna('').map(format_event_description)
-            # Ensure Series type for concat
-            if not isinstance(ev_desc, pd.Series):
-                ev_desc = pd.Series(ev_desc, index=ev.index)
+            # Invisible markers at a fixed y just above the line to enable hover
+            ev_desc = render_event_descriptions(ev)
 
             fig.add_trace(go.Scatter(
                 x=ev['start_date'],
@@ -867,7 +624,7 @@ def plot_time_series_line(filtered_df, bucket_size: str, lock_y: bool = True, ev
                     year_txt = ''
                 if year_txt:
                     fig.add_annotation(x=xdt, y=y_min - head * 0.3, text=year_txt,
-                                       showarrow=False, font=dict(color='crimson', size=10))
+                                       showarrow=False, font=dict(color=EVENT_MARKER_COLOR, size=10))
 
     st.plotly_chart(fig, use_container_width=True)
 
@@ -883,7 +640,7 @@ def plot_state_counts(filtered_df):
             x=state_counts.index,
             y=state_counts.values,
             name='Licenses by State',
-            marker_color='lightcoral',
+            marker_color=STATE_BAR_COLOR,
             text=state_counts.values,
             textposition='outside',
             hovertemplate='<b>State:</b> %{x}<br><b>Licenses:</b> %{y}<extra></extra>'
@@ -947,39 +704,10 @@ def plot_us_map(filtered_df):
         st.info("No `State` column available for US map.")
         return
 
-    # Mapping of full state names to USPS codes
-    us_state_to_abbrev = {
-        'Alabama':'AL','Alaska':'AK','Arizona':'AZ','Arkansas':'AR','California':'CA','Colorado':'CO',
-        'Connecticut':'CT','Delaware':'DE','Florida':'FL','Georgia':'GA','Hawaii':'HI','Idaho':'ID',
-        'Illinois':'IL','Indiana':'IN','Iowa':'IA','Kansas':'KS','Kentucky':'KY','Louisiana':'LA',
-        'Maine':'ME','Maryland':'MD','Massachusetts':'MA','Michigan':'MI','Minnesota':'MN','Mississippi':'MS',
-        'Missouri':'MO','Montana':'MT','Nebraska':'NE','Nevada':'NV','New Hampshire':'NH','New Jersey':'NJ',
-        'New Mexico':'NM','New York':'NY','North Carolina':'NC','North Dakota':'ND','Ohio':'OH','Oklahoma':'OK',
-        'Oregon':'OR','Pennsylvania':'PA','Rhode Island':'RI','South Carolina':'SC','South Dakota':'SD',
-        'Tennessee':'TN','Texas':'TX','Utah':'UT','Vermont':'VT','Virginia':'VA','Washington':'WA',
-        'West Virginia':'WV','Wisconsin':'WI','Wyoming':'WY','District Of Columbia':'DC','District of Columbia':'DC'
-    }
-
-    def to_state_code(x: str):
-        if pd.isna(x):
-            return None
-        s = str(x).strip()
-        # If already a 2-letter code
-        if len(s) == 2 and s.upper() in us_state_to_abbrev.values():
-            return s.upper()
-        # Try title-case full name
-        key = s.title()
-        if key in us_state_to_abbrev:
-            return us_state_to_abbrev[key]
-        # Try common abbreviations passed in mixed case
-        if s.upper() in us_state_to_abbrev.values():
-            return s.upper()
-        return None
-
     state_counts = filtered_df['State'].value_counts()
-    
+
     # Start with all US states set to 0
-    all_state_codes = list(us_state_to_abbrev.values())
+    all_state_codes = list(US_STATE_TO_ABBREV.values())
     codes = all_state_codes.copy()
     values = [0] * len(all_state_codes)
     hover_text = [f"{code}: 0" for code in all_state_codes]
@@ -1007,14 +735,14 @@ def plot_us_map(filtered_df):
         st.info("No mappable US state values found for the map.")
         return
 
-    # Cap the color scale to 300 at the high end for better visual distinction
+    # Cap the color scale at US_MAP_ZMAX for visual distinction across states
     fig = go.Figure(data=go.Choropleth(
         locations=codes,
         z=values,
         locationmode='USA-states',
         colorscale='Blues',
         zmin=0,
-        zmax=300,
+        zmax=US_MAP_ZMAX,
         text=hover_text,
         marker_line_color='black',
         colorbar=dict(title='Licenses', ticks='outside')
@@ -1041,44 +769,11 @@ def plot_ca_county_map(filtered_df):
         st.info("No `County` column available for California county map.")
         return
 
-    # California county name to FIPS code mapping
-    ca_county_fips = {
-        'Alameda': '06001', 'Alpine': '06003', 'Amador': '06005', 'Butte': '06007',
-        'Calaveras': '06009', 'Colusa': '06011', 'Contra Costa': '06013', 'Del Norte': '06015',
-        'El Dorado': '06017', 'Fresno': '06019', 'Glenn': '06021', 'Humboldt': '06023',
-        'Imperial': '06025', 'Inyo': '06027', 'Kern': '06029', 'Kings': '06031',
-        'Lake': '06033', 'Lassen': '06035', 'Los Angeles': '06037', 'Madera': '06039',
-        'Marin': '06041', 'Mariposa': '06043', 'Mendocino': '06045', 'Merced': '06047',
-        'Modoc': '06049', 'Mono': '06051', 'Monterey': '06053', 'Napa': '06055',
-        'Nevada': '06057', 'Orange': '06059', 'Placer': '06061', 'Plumas': '06063',
-        'Riverside': '06065', 'Sacramento': '06067', 'San Benito': '06069', 'San Bernardino': '06071',
-        'San Diego': '06073', 'San Francisco': '06075', 'San Joaquin': '06077', 'San Luis Obispo': '06079',
-        'San Mateo': '06081', 'Santa Barbara': '06083', 'Santa Clara': '06085', 'Santa Cruz': '06087',
-        'Shasta': '06089', 'Sierra': '06091', 'Siskiyou': '06093', 'Solano': '06095',
-        'Sonoma': '06097', 'Stanislaus': '06099', 'Sutter': '06101', 'Tehama': '06103',
-        'Trinity': '06105', 'Tulare': '06107', 'Tuolumne': '06109', 'Ventura': '06111',
-        'Yolo': '06113', 'Yuba': '06115'
-    }
-
-    def to_county_fips(x: str):
-        if pd.isna(x):
-            return None
-        s = str(x).strip()
-        # Try title case
-        key = s.title()
-        if key in ca_county_fips:
-            return ca_county_fips[key]
-        # Try removing " County" suffix
-        cleaned = re.sub(r'\s+County$', '', key, flags=re.IGNORECASE).title()
-        if cleaned in ca_county_fips:
-            return ca_county_fips[cleaned]
-        return None
-
     county_counts = filtered_df['County'].value_counts()
-    
+
     # Start with all CA counties set to 0
-    all_county_names = list(ca_county_fips.keys())
-    all_fips = list(ca_county_fips.values())
+    all_county_names = list(CA_COUNTY_FIPS.keys())
+    all_fips = list(CA_COUNTY_FIPS.values())
     fips = all_fips.copy()
     values = [0] * len(all_fips)
     hover_text = [f"{name}: 0" for name in all_county_names]
@@ -1169,7 +864,7 @@ def plot_yearly_retirements(filtered_df, start_year=None, end_year=None):
     fig = go.Figure()
     fig.add_trace(go.Bar(
         x=yearly['Exp_Year'], y=yearly['Expired'],
-        name='Licenses Expired', marker_color='indianred',
+        name='Licenses Expired', marker_color=EXPIRATION_BAR_COLOR,
         text=yearly['Expired'], textposition='outside',
         hovertemplate='<b>Year %{x}</b><br>Expired: %{y}<extra></extra>'
     ))
@@ -1234,7 +929,7 @@ def plot_active_licenses_per_year(filtered_df, start_year=None, end_year=None):
         x=years, y=active_counts,
         mode='lines+markers', fill='tozeroy',
         name='Active Licenses',
-        line=dict(color='seagreen', width=2),
+        line=dict(color=ACTIVE_LINE_COLOR, width=2),
         marker=dict(size=5),
         hovertemplate='<b>%{x}</b><br>Active: %{y:,}<extra></extra>'
     ))
@@ -1343,8 +1038,6 @@ def main():
         
         st.write(f"\n**Data shape:** {df.shape[0]} rows x {df.shape[1]} columns")
 
-    # (file information expander removed by user request)
-
     # Seed widget defaults from URL query params (first load only)
     _init_filters_from_url(df)
 
@@ -1379,10 +1072,6 @@ def main():
         full_df
     )
 
-    # Table
-    # ...filtered data table section removed as requested...
-
-    # ...export data section removed as requested...
 
 if __name__ == "__main__":
     main()

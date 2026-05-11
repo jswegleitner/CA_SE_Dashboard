@@ -45,18 +45,25 @@ pip install -r requirements.txt
 
 ```
 CA License Dashboard/
-├── SE_Dashboard_v7.py                    # Streamlit dashboard
+├── SE_Dashboard_v7.py                    # Streamlit dashboard (orchestrator)
+├── dashboard_lib/                        # Extracted helpers
+│   ├── timeline.py                       # Timeline event loading + hover formatting
+│   ├── periods.py                        # Period bucketing primitives
+│   └── geo.py                            # State/county name → code lookups
+├── data/                                 # Tracked CSV data
+│   ├── ProfEngrsLandSurvyrsGeologist_Data00_structural_engineers_cleaned.csv
+│   ├── timeline_events.csv               # Timeline event annotations
+│   └── License History Table.csv         # Source for timeline events
 ├── requirements.txt                      # Python dependencies
 ├── .gitignore
 ├── README.md                             # This file
-├── timeline_events.csv                   # Timeline event annotations
-├── License History Table.csv             # Source for timeline events
-├── Offline Processing/
+├── Offline Processing/                   # (gitignored)
 │   ├── License_List_Claude_v3.py         # Downloads data from DCA
 │   ├── SE_Data_Process_V9.py             # Processes and cleans data
 │   └── pipeline_coordinator.py           # Coordinates all scripts
 ├── tools/
-│   └── reprocess_timeline.py             # Regenerates timeline_events.csv
+│   └── reprocess_timeline.py             # Regenerates data/timeline_events.csv
+├── tests/                                # pytest suite (run with `pytest`)
 └── .streamlit/
     └── config.toml                       # Streamlit UI configuration
 ```
@@ -150,10 +157,12 @@ Update paths in each script as needed:
 
 ### Dashboard Settings
 The dashboard looks for CSV files in this order:
-1. Streamlit secrets (`DATA_PATH` or `DATA_URL`)
-2. Default filename: `ProfEngrsLandSurvyrsGeologist_Data00.xls_structural_engineers_cleaned.csv`
-3. Any CSV file in the current directory with license data columns
-4. File upload widget
+1. Streamlit secrets (`DATA_PATH` or `DATA_URL`) — used on Streamlit Cloud; if `DATA_PATH` is set, update it to point at `data/...` after this layout change.
+2. Known filenames inside `data/`, then in the project root (legacy fallback).
+3. Any CSV in `data/` or the project root with license data columns.
+4. File upload widget.
+
+Timeline events (`timeline_events.csv`) are looked up the same way: `data/` first, then the project root.
 
 ## Data Privacy
 
