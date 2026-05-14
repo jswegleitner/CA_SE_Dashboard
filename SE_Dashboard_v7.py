@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 Structural Engineers Dashboard - Streamlit Version
 Loads pre-processed CSV data and creates interactive dashboard
@@ -38,16 +38,38 @@ from dashboard_lib.geo import (
     to_state_code,
     to_county_fips,
 )
+from dashboard_lib.theme import (
+    register_plotly_template,
+    DASHBOARD_CSS,
+    PRIMARY,
+    ACCENT,
+    SUCCESS,
+    DANGER,
+    PURPLE,
+    NEUTRAL,
+    BORDER,
+    BLUE_SCALE,
+    RED_SCALE,
+    CATEGORICAL_SEQUENCE,
+)
+
+# Activate the unified Plotly template once at module load
+register_plotly_template()
 
 # ---------- Visual constants ----------
 US_MAP_ZMAX = 300
-EVENT_TYPE_PALETTE = ['crimson', 'darkorange', 'seagreen', 'mediumpurple', 'teal', 'goldenrod']
-MAIN_BAR_COLOR = 'steelblue'
-COMPARISON_BAR_COLOR = 'coral'
-EXPIRATION_BAR_COLOR = 'indianred'
-ACTIVE_LINE_COLOR = 'seagreen'
-STATE_BAR_COLOR = 'lightcoral'
-EVENT_MARKER_COLOR = 'crimson'
+EVENT_TYPE_PALETTE = CATEGORICAL_SEQUENCE
+MAIN_BAR_COLOR = PRIMARY
+COMPARISON_BAR_COLOR = ACCENT
+EXPIRATION_BAR_COLOR = DANGER
+ACTIVE_LINE_COLOR = SUCCESS
+STATE_BAR_COLOR = PRIMARY
+EVENT_MARKER_COLOR = DANGER
+
+# When a categorical axis has more than this many items, hide outside text labels
+# on bars to reduce visual noise.
+BAR_LABEL_MAX_CATEGORIES = 25
+
 
 # ---------- Data loading ----------
 def _file_hash(src):
@@ -92,6 +114,7 @@ def parse_dates(df):
 
     return df
 
+
 def resolve_data_source(default_local_filename: str):
     """
     Resolves the data source path based on the environment.
@@ -106,16 +129,14 @@ def resolve_data_source(default_local_filename: str):
     except Exception:
         pass
 
-    # Fallback for local use: try multiple possible filenames
     possible_files = [
         default_local_filename,
         default_local_filename + ".csv",
         "structural_engineers_cleaned.csv",
         "ProfEngrsLandSurvyrsGeologist_Data00.csv",
-        "ProfEngrsLandSurvyrsGeologist_Data00_structural_engineers_cleaned.csv"
+        "ProfEngrsLandSurvyrsGeologist_Data00_structural_engineers_cleaned.csv",
     ]
 
-    # Search data/ first, then project root for backwards compatibility.
     current_dir = Path(__file__).parent if '__file__' in globals() else Path.cwd()
     search_dirs = [current_dir / 'data', current_dir]
 
@@ -125,7 +146,6 @@ def resolve_data_source(default_local_filename: str):
             if local_csv_path.exists():
                 return str(local_csv_path)
 
-    # Fallback: look for any CSV with required license columns.
     for d in search_dirs:
         for csv_path in d.glob("*.csv"):
             if csv_path.name.lower() in ['timeline_events.csv', 'license history table.csv']:
@@ -139,6 +159,7 @@ def resolve_data_source(default_local_filename: str):
 
     return None
 
+
 # ---------- URL query-param helpers ----------
 
 def _init_filters_from_url(df):
@@ -151,7 +172,6 @@ def _init_filters_from_url(df):
     if not params:
         return
 
-    # States multiselect
     if 'states' in params and 'state_filter' not in st.session_state:
         url_states = [s.strip() for s in params['states'].split(',') if s.strip()]
         valid = set(df['State'].dropna().unique()) if 'State' in df.columns else set()
@@ -159,7 +179,6 @@ def _init_filters_from_url(df):
         if filtered:
             st.session_state['state_filter'] = filtered
 
-    # Statuses multiselect
     if 'statuses' in params and 'status_filter' not in st.session_state:
         url_statuses = [s.strip() for s in params['statuses'].split(',') if s.strip()]
         valid = set(df['License Status'].dropna().unique()) if 'License Status' in df.columns else set()
@@ -167,7 +186,6 @@ def _init_filters_from_url(df):
         if filtered:
             st.session_state['status_filter'] = filtered
 
-    # Date range slider
     if 'start_year' in params and 'date_range_slider' not in st.session_state:
         try:
             sy = int(params['start_year'])
@@ -176,11 +194,9 @@ def _init_filters_from_url(df):
         except (ValueError, TypeError):
             pass
 
-    # Comparison state
     if 'compare' in params and 'comparison_state' not in st.session_state:
         st.session_state['comparison_state'] = params['compare']
 
-    # Expiration types
     if 'exp' in params and 'expired_filter' not in st.session_state:
         url_exp = [s.strip() for s in params['exp'].split(',') if s.strip()]
         if url_exp:
@@ -205,18 +221,71 @@ def _build_share_params(filters: dict) -> dict:
     return params
 
 
+# ---------- Filter chip summary ----------
+
+def _render_filter_chips(filters: dict, df: pd.DataFrame):
+    """Render a compact chip bar showing the currently-applied filters.
+
+    Only shows chips that differ from the unfiltered default — keeps the bar
+    quiet when nothing is filtered.
+    """
+    all_states = sorted(df['State'].dropna().unique().tolist()) if 'State' in df.columns else []
+    all_statuses = sorted(df['License Status'].dropna().unique().tolist()) if 'License Status' in df.columns else []
+
+    if 'Original Issue Date' in df.columns and pd.api.types.is_datetime64_any_dtype(df['Original Issue Date']):
+        full_min = int(df['Original Issue Date'].dt.year.min())
+        full_max = int(df['Original Issue Date'].dt.year.max())
+    else:
+        full_min, full_max = None, None
+
+    chips = []
+
+    selected_states = filters.get('states') or []
+    if selected_states and set(selected_states) != set(all_states):
+        preview = ", ".join(selected_states[:3])
+        if len(selected_states) > 3:
+            preview += f" +{len(selected_states) - 3} more"
+        chips.append(("States", preview))
+
+    selected_statuses = filters.get('statuses') or []
+    if selected_statuses and set(selected_statuses) != set(all_statuses):
+        chips.append(("Status", ", ".join(selected_statuses)))
+
+    sy, ey = filters.get('start_year'), filters.get('end_year')
+    if sy is not None and ey is not None and (sy != full_min or ey != full_max):
+        chips.append(("Years", f"{sy}–{ey}"))
+
+    exp = filters.get('expiration_types') or []
+    if exp and set(exp) != {'Active Only', 'Expired Only'}:
+        chips.append(("Show", ", ".join(exp).replace(' Only', '')))
+
+    cmp_state = filters.get('comparison_state')
+    if cmp_state and cmp_state != 'None':
+        chips.append(("Compare", cmp_state))
+
+    if not chips:
+        html = '<div class="filter-chips"><span class="filter-chip-empty">No filters applied — viewing all records</span></div>'
+    else:
+        items = "".join(
+            f'<span class="filter-chip"><span class="filter-chip-key">{key}</span>{val}</span>'
+            for key, val in chips
+        )
+        html = f'<div class="filter-chips">{items}</div>'
+
+    st.markdown(html, unsafe_allow_html=True)
+
+
 # ---------- Filters & visuals (updated with Plotly) ----------
 def create_filters(df):
     filters = {}
 
-    st.sidebar.header("🔍 Data Filters")
-    # Timeline events toggle at the very top of the Data Filters section
+    st.sidebar.header("Filters")
     events_df_present = load_timeline_events() is not None
     filters['show_events'] = st.sidebar.checkbox(
         "Show timeline events",
         value=events_df_present,
         help="Toggle overlays of exam/code history on charts (if available).",
-        key='show_events_toggle'
+        key='show_events_toggle',
     )
 
     st.sidebar.subheader("State")
@@ -226,16 +295,15 @@ def create_filters(df):
         options=states,
         default=states,
         key='state_filter',
-        help="Select one or more states. Leave empty to include all states."
+        help="Select one or more states. Leave empty to include all states.",
     )
-    
-    # Comparison state overlay
+
     filters['comparison_state'] = st.sidebar.selectbox(
         "Compare with State (overlay on bar chart):",
         options=['None'] + states,
         index=0,
         key='comparison_state',
-        help="Select a single state to overlay its data on the time series bar chart"
+        help="Select a single state to overlay its data on the time series bar chart",
     )
 
     st.sidebar.subheader("License Status")
@@ -245,7 +313,7 @@ def create_filters(df):
         options=statuses,
         default=statuses,
         key='status_filter',
-        help="Select one or more license statuses. Leave empty to include all statuses."
+        help="Select one or more license statuses. Leave empty to include all statuses.",
     )
 
     st.sidebar.subheader("Date Range")
@@ -260,7 +328,7 @@ def create_filters(df):
         min_value=min_year,
         max_value=max_year,
         value=(min_year, max_year),
-        key='date_range_slider'
+        key='date_range_slider',
     )
 
     expiration_options = ['Active Only', 'Expired Only']
@@ -269,13 +337,13 @@ def create_filters(df):
         options=expiration_options,
         default=expiration_options,
         key='expired_filter',
-        help="Active = not yet expired, Expired = past expiration date. Select both for all licenses."
+        help="Active = not yet expired, Expired = past expiration date. Select both for all licenses.",
     )
 
-    # Small hint if no events file present
     if not events_df_present:
         st.sidebar.caption("Add `timeline_events.csv` with columns: start_date, end_date (optional), label, description, type.")
     return filters
+
 
 def apply_filters(df, filters):
     if df is None or df.empty:
@@ -283,15 +351,12 @@ def apply_filters(df, filters):
 
     filtered_df = df.copy()
 
-    # State filter
     if 'State' in filtered_df.columns and filters['states']:
         filtered_df = filtered_df[filtered_df['State'].isin(filters['states'])]
 
-    # Status filter
     if 'License Status' in filtered_df.columns and filters['statuses']:
         filtered_df = filtered_df[filtered_df['License Status'].isin(filters['statuses'])]
 
-    # Date range filter
     if 'Original Issue Date' in filtered_df.columns and pd.api.types.is_datetime64_any_dtype(filtered_df['Original Issue Date']):
         mask = (
             (filtered_df['Original Issue Date'].dt.year >= filters['start_year']) &
@@ -299,11 +364,9 @@ def apply_filters(df, filters):
         )
         filtered_df = filtered_df[mask]
 
-    # Expiration filter
     if 'Expiration Date' in filtered_df.columns and pd.api.types.is_datetime64_any_dtype(filtered_df['Expiration Date']):
         current_date = pd.Timestamp.now()
         if filters['expiration_types']:
-            # Only include rows that match any selected expiration category
             inc_active = 'Active Only' in filters['expiration_types']
             inc_expired = 'Expired Only' in filters['expiration_types']
             mask = pd.Series(False, index=filtered_df.index)
@@ -315,61 +378,66 @@ def apply_filters(df, filters):
 
     return filtered_df
 
-def create_visualizations(filtered_df, show_events: bool, start_year: Optional[int] = None, end_year: Optional[int] = None, comparison_state: str = None, full_df = None):
+
+def create_visualizations(filtered_df, show_events: bool, start_year: Optional[int] = None, end_year: Optional[int] = None, comparison_state: str = None, full_df=None):
     if filtered_df is None or filtered_df.empty:
         st.warning("No data to visualize with current filters.")
         return
-    # High-level visual section: each visual is its own function to make
-    # independent editing and testing straightforward.
-    st.subheader("📈 Licenses Issued Over Time")
 
-    col1, _ = st.columns([1, 3])
-    with col1:
-        bucket_size = st.selectbox("Time Grouping:", ["Yearly", "Half-Yearly", "Quarterly", "Monthly"]) 
-        lock_y = st.checkbox("Lock Y-axis when zooming", value=True, help="When checked, zooming/panning will only affect the X axis; Y axis will remain fixed.")
+    has_multi_state = 'State' in filtered_df.columns and filtered_df['State'].nunique() > 1
+    has_ca_county = (
+        'State' in filtered_df.columns
+        and 'County' in filtered_df.columns
+        and not filtered_df[filtered_df['State'] == 'CA'].empty
+    )
+    has_geo = has_multi_state or has_ca_county
+    has_status = 'License Status' in filtered_df.columns and filtered_df['License Status'].nunique() > 1
 
-    # Load events (if present)
-    events_df = load_timeline_events()
-    # Time series
-    plot_time_series(filtered_df, bucket_size, lock_y, events_df=events_df, show_events=show_events, start_year=start_year, end_year=end_year, comparison_state=comparison_state, full_df=full_df)
-    # Line chart variant
-    plot_time_series_line(filtered_df, lock_y, events_df=events_df, show_events=show_events, start_year=start_year, end_year=end_year)
-    st.markdown("---")
+    tab_labels = ["Activity"]
+    if has_geo:
+        tab_labels.append("Geography")
+    if has_status:
+        tab_labels.append("Status")
 
-    # Yearly retirements
-    plot_yearly_retirements(filtered_df, start_year=start_year, end_year=end_year)
-    st.markdown("---")
+    tabs = st.tabs(tab_labels)
 
-    # Active licenses per year
-    plot_active_licenses_per_year(filtered_df, start_year=start_year, end_year=end_year)
-    st.markdown("---")
+    # ---------- Activity tab ----------
+    with tabs[0]:
+        st.subheader("Licenses Issued Over Time")
+        col1, _ = st.columns([1, 3])
+        with col1:
+            bucket_size = st.selectbox("Time Grouping:", ["Yearly", "Half-Yearly", "Quarterly", "Monthly"])
+            lock_y = st.checkbox(
+                "Lock Y-axis when zooming",
+                value=True,
+                help="When checked, zooming/panning will only affect the X axis; Y axis will remain fixed.",
+            )
 
-    # Average license age per year
-    plot_avg_license_age_per_year(filtered_df, start_year=start_year, end_year=end_year)
-    st.markdown("---")
+        events_df = load_timeline_events()
+        plot_time_series(filtered_df, bucket_size, lock_y, events_df=events_df, show_events=show_events, start_year=start_year, end_year=end_year, comparison_state=comparison_state, full_df=full_df)
+        plot_time_series_line(filtered_df, lock_y, events_df=events_df, show_events=show_events, start_year=start_year, end_year=end_year)
+        plot_yearly_retirements(filtered_df, start_year=start_year, end_year=end_year)
+        plot_active_licenses_per_year(filtered_df, start_year=start_year, end_year=end_year)
+        plot_avg_license_age_per_year(filtered_df, start_year=start_year, end_year=end_year)
 
-    # By State
-    if 'State' in filtered_df.columns and filtered_df['State'].nunique() > 1:
-        plot_state_counts(filtered_df)
-        # Also render a US choropleth map showing counts by state
-        plot_us_map(filtered_df)
-        st.markdown("---")
-    
-    # California county map - show whenever there's CA data
-    if 'State' in filtered_df.columns and 'County' in filtered_df.columns:
-        ca_data = filtered_df[filtered_df['State'] == 'CA']
-        if not ca_data.empty:
-            st.subheader("🗺️ California Licenses by County")
-            plot_ca_county_map(ca_data)
-            st.markdown("---")
+    # ---------- Geography tab ----------
+    if has_geo:
+        with tabs[tab_labels.index("Geography")]:
+            if has_multi_state:
+                plot_state_counts(filtered_df)
+                plot_us_map(filtered_df)
+            if has_ca_county:
+                ca_data = filtered_df[filtered_df['State'] == 'CA']
+                st.subheader("California Licenses by County")
+                plot_ca_county_map(ca_data)
 
-    # Status pie chart
-    if 'License Status' in filtered_df.columns and filtered_df['License Status'].nunique() > 1:
-        plot_status_pie(filtered_df)
-        st.markdown("---")
+    # ---------- Status tab ----------
+    if has_status:
+        with tabs[tab_labels.index("Status")]:
+            plot_status_pie(filtered_df)
 
 
-def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_df: Optional[pd.DataFrame] = None, show_events: bool = False, start_year: Optional[int] = None, end_year: Optional[int] = None, comparison_state: str = None, full_df = None):
+def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_df: Optional[pd.DataFrame] = None, show_events: bool = False, start_year: Optional[int] = None, end_year: Optional[int] = None, comparison_state: str = None, full_df=None):
     if 'Original Issue Date' not in filtered_df.columns or not pd.api.types.is_datetime64_any_dtype(filtered_df['Original Issue Date']):
         st.info("Original Issue Date column not found or not datetime.")
         return
@@ -380,18 +448,19 @@ def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_
         st.info("No time-series data for the selected filters.")
         return
 
+    show_labels = len(license_counts) <= BAR_LABEL_MAX_CATEGORIES
+
     fig = go.Figure()
     fig.add_trace(go.Bar(
         x=[str(p) for p in license_counts.index],
         y=license_counts.values,
         name='Main Data',
         marker_color=MAIN_BAR_COLOR,
-        text=license_counts.values,
-        textposition='outside',
-        hovertemplate='<b>Period:</b> %{x}<br><b>Licenses:</b> %{y}<extra></extra>'
+        text=license_counts.values if show_labels else None,
+        textposition='outside' if show_labels else 'none',
+        hovertemplate='<b>Period:</b> %{x}<br><b>Licenses:</b> %{y}<extra></extra>',
     ))
 
-    # Add comparison state overlay if selected
     if comparison_state and comparison_state != 'None' and full_df is not None:
         comp_df = full_df[full_df['State'] == comparison_state].copy()
         if start_year is not None and end_year is not None:
@@ -402,28 +471,27 @@ def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_
 
         comp_counts = _count_by_period(comp_df, bucket_size, start_year, end_year)
         comp_counts = comp_counts.reindex(license_counts.index, fill_value=0)
-        
+
         fig.add_trace(go.Bar(
             x=[str(p) for p in comp_counts.index],
             y=comp_counts.values,
             name=f'{comparison_state} (Comparison)',
             marker_color=COMPARISON_BAR_COLOR,
-            text=comp_counts.values,
-            textposition='outside',
-            opacity=0.7,
-            hovertemplate=f'<b>Period:</b> %{{x}}<br><b>{comparison_state} Licenses:</b> %{{y}}<extra></extra>'
+            text=comp_counts.values if show_labels else None,
+            textposition='outside' if show_labels else 'none',
+            opacity=0.75,
+            hovertemplate=f'<b>Period:</b> %{{x}}<br><b>{comparison_state} Licenses:</b> %{{y}}<extra></extra>',
         ))
 
     fig.update_layout(
-        title=f"Structural Engineer Licenses Issued Over Time ({bucket_size})",
         xaxis_title="Period",
         yaxis_title="Number of Licenses",
         showlegend=True if (comparison_state and comparison_state != 'None') else False,
-        height=500,
+        height=460,
         hovermode='x unified',
         dragmode='zoom',
-        hoverlabel=dict(align='left'),
-        barmode='group'
+        barmode='group',
+        bargap=0.18,
     )
 
     num_periods = len(license_counts)
@@ -432,32 +500,24 @@ def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_
     elif num_periods > 10:
         fig.update_xaxes(tickangle=45)
 
-    # Ensure X axis is zoomable but optionally lock Y axis so zoom only affects X
     fig.update_xaxes(fixedrange=False)
     fig.update_yaxes(fixedrange=lock_y)
 
-    # Ensure category axis order stays tied to license data only
     categories = [str(p) for p in license_counts.index]
     fig.update_xaxes(categoryorder='array', categoryarray=categories)
 
-    # Overlay timeline events as markers aligned to the current bucket
     if show_events and (events_df is not None) and (not events_df.empty):
         ev = events_df.copy()
-        # Restrict events to selected year range if provided
         if start_year is not None and end_year is not None:
             ev = ev[(ev['start_date'].dt.year >= start_year) & (ev['start_date'].dt.year <= end_year)]
         ev['bucket'] = ev['start_date'].apply(lambda dt: to_bucket_label(dt, bucket_size))
         ev = ev.dropna(subset=['bucket'])
-        # Only keep events whose bucket exists in the data categories so axis isn't extended by events
         ev = ev[ev['bucket'].isin(categories)]
         if not ev.empty:
-            # Place markers at the bottom of the chart (slightly below 0)
             y_max = max(license_counts.values) if len(license_counts) else 0
             pad = max(1, y_max * 0.06)
-            # Extend y-axis to include more negative space for markers and text labels
             fig.update_yaxes(range=[-pad * 2.5, y_max * 1.05])
 
-            # Year-only text in red; full details in hover
             text_year = ev['start_date'].dt.year.astype('Int64').astype(str).fillna('')
 
             ev_desc = render_event_descriptions(ev)
@@ -472,7 +532,7 @@ def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_
                 textposition='bottom center',
                 textfont=dict(color=EVENT_MARKER_COLOR),
                 hovertemplate=(
-                    '<b>%{customdata[0]}</b><br>'  # label
+                    '<b>%{customdata[0]}</b><br>'
                     'Date: %{customdata[1]}<br>'
                     'Type: %{customdata[2]}<br>'
                     '%{customdata[3]}<extra></extra>'
@@ -481,13 +541,13 @@ def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_
                     ev['label'].fillna(''),
                     ev['start_date'].dt.strftime('%Y-%m-%d'),
                     ev['type'].astype(str),
-                    ev_desc
-                ], axis=1).values
+                    ev_desc,
+                ], axis=1).values,
             ))
 
     st.plotly_chart(fig, use_container_width=True)
 
-    with st.expander("📊 Time Series Statistics"):
+    with st.expander("Time Series Statistics"):
         c1, c2, c3 = st.columns(3)
         with c1: st.metric("Peak Period", str(license_counts.idxmax()))
         with c2: st.metric("Peak Count", int(license_counts.max()))
@@ -499,8 +559,6 @@ def plot_time_series_line(filtered_df, lock_y: bool = True, events_df: Optional[
     Line chart of licenses over time. X axis is the Original Issue Date and Y is
     either the license number (when available) or a cumulative index.
     """
-    # New behavior: plot each individual license by its Original Issue Date on the X axis
-    # and the cumulative license count on the Y axis so the line monotonically increases.
     if 'Original Issue Date' not in filtered_df.columns:
         st.info("Original Issue Date column not found.")
         return
@@ -513,7 +571,6 @@ def plot_time_series_line(filtered_df, lock_y: bool = True, events_df: Optional[
         st.info("No time-series data for the selected filters.")
         return
 
-    # Prefer plotting the actual license number field on Y vs the date on X.
     license_col = None
     for col in df_line.columns:
         if col.lower().replace('_', ' ').strip() in (
@@ -523,7 +580,6 @@ def plot_time_series_line(filtered_df, lock_y: bool = True, events_df: Optional[
             break
     if license_col:
         yvals = pd.to_numeric(df_line[license_col], errors='coerce')
-        # If values are non-numeric, warn and fall back to cumulative index
         if yvals.isna().all():
             st.warning(f"Detected license column `{license_col}`, but values are not numeric. Plotting cumulative index instead.")
             df_line = df_line.reset_index(drop=True)
@@ -543,26 +599,22 @@ def plot_time_series_line(filtered_df, lock_y: bool = True, events_df: Optional[
         y=yvals,
         mode='lines+markers',
         name='Licenses',
-        line=dict(color=MAIN_BAR_COLOR),
-        marker=dict(size=4),
-        hovertemplate='<b>Date:</b> %{x|%Y-%m-%d}<br><b>Value:</b> %{y}<extra></extra>'
+        line=dict(color=MAIN_BAR_COLOR, width=2),
+        marker=dict(size=4, color=MAIN_BAR_COLOR),
+        hovertemplate='<b>Date:</b> %{x|%Y-%m-%d}<br><b>Value:</b> %{y}<extra></extra>',
     ))
 
     fig.update_layout(
-        title=f"Structural Engineer Licenses Over Time (individual licenses)",
         xaxis_title="Original Issue Date",
         yaxis_title=y_label,
-        height=420,
+        height=400,
         hovermode='x unified',
         dragmode='zoom',
-        hoverlabel=dict(align='left')
     )
 
-    # Allow zooming on X; optionally lock Y so it doesn't rescale
     fig.update_xaxes(fixedrange=False)
     fig.update_yaxes(fixedrange=lock_y)
 
-    # Constrain X-axis strictly to the filtered license dates (ignore events for autorange)
     try:
         x_min = pd.to_datetime(f"{start_year}-01-01") if start_year is not None else df_line['Original Issue Date'].min()
         x_max = pd.to_datetime(f"{end_year}-12-31") if end_year is not None else df_line['Original Issue Date'].max()
@@ -571,28 +623,21 @@ def plot_time_series_line(filtered_df, lock_y: bool = True, events_df: Optional[
     except Exception:
         pass
 
-    # Overlay timeline events as vertical lines on the datetime X axis
     if show_events and (events_df is not None) and (not events_df.empty):
-        # Create consistent colors by event type
         type_styles = {}
         for i, t in enumerate(events_df['type'].astype(str).unique()):
             type_styles[t] = dict(color=EVENT_TYPE_PALETTE[i % len(EVENT_TYPE_PALETTE)], dash='dot')
 
-        # Reserve headroom for year labels
         y_max = float(pd.Series(yvals).max()) if len(yvals) else 0.0
         y_min = float(pd.Series(yvals).min()) if len(yvals) else 0.0
         head = max(1.0, y_max * 0.08)
-        # Extend both top and bottom to accommodate labels
         fig.update_yaxes(range=[y_min - head * 0.5, y_max + head * 2.0])
 
-        # Add vlines and year-only annotations
         ev = events_df.copy()
         ev = ev.dropna(subset=['start_date'])
-        # Restrict events to the same visible date range so they don't expand axes
         if start_year is not None and end_year is not None:
             ev = ev[(ev['start_date'].dt.year >= start_year) & (ev['start_date'].dt.year <= end_year)]
         if not ev.empty:
-            # Invisible markers at a fixed y just above the line to enable hover
             ev_desc = render_event_descriptions(ev)
 
             fig.add_trace(go.Scatter(
@@ -610,9 +655,9 @@ def plot_time_series_line(filtered_df, lock_y: bool = True, events_df: Optional[
                 customdata=pd.concat([
                     ev['label'].fillna(''),
                     ev['type'].astype(str),
-                    ev_desc
+                    ev_desc,
                 ], axis=1).values,
-                showlegend=False
+                showlegend=False,
             ))
 
             for _, r in ev.iterrows():
@@ -621,7 +666,6 @@ def plot_time_series_line(filtered_df, lock_y: bool = True, events_df: Optional[
                 dash = type_styles.get(t, dict(dash='dot'))['dash']
                 xdt = r['start_date']
                 fig.add_vline(x=xdt, line=dict(color=color, dash=dash, width=1))
-                # Year-only label in red at the bottom
                 try:
                     year_txt = str(pd.to_datetime(xdt).year)
                 except Exception:
@@ -634,8 +678,9 @@ def plot_time_series_line(filtered_df, lock_y: bool = True, events_df: Optional[
 
 
 def plot_state_counts(filtered_df):
-    st.subheader("🗺️ Licenses by State")
+    st.subheader("Licenses by State")
     state_counts = filtered_df['State'].value_counts()
+    show_labels = len(state_counts) <= 15
 
     col1, col2 = st.columns([2, 1])
     with col1:
@@ -645,82 +690,106 @@ def plot_state_counts(filtered_df):
             y=state_counts.values,
             name='Licenses by State',
             marker_color=STATE_BAR_COLOR,
-            text=state_counts.values,
-            textposition='outside',
-            hovertemplate='<b>State:</b> %{x}<br><b>Licenses:</b> %{y}<extra></extra>'
+            text=state_counts.values if show_labels else None,
+            textposition='outside' if show_labels else 'none',
+            hovertemplate='<b>State:</b> %{x}<br><b>Licenses:</b> %{y}<extra></extra>',
         ))
 
         fig.update_layout(
-            title="Number of Structural Engineer Licenses by State",
             xaxis_title="State",
             yaxis_title="Number of Licenses",
             showlegend=False,
-            height=500,
-            xaxis_tickangle=45
+            height=460,
+            xaxis_tickangle=45,
+            bargap=0.18,
         )
 
         st.plotly_chart(fig, use_container_width=True)
 
     with col2:
-        st.markdown("**Top 5 States:**")
+        st.markdown("**Top 5 States**")
         for i, (state, count) in enumerate(state_counts.head().items(), 1):
             percentage = (count / len(filtered_df)) * 100
             st.write(f"{i}. **{state}**: {count} ({percentage:.1f}%)")
 
 
 def plot_status_pie(filtered_df):
-    st.subheader("📋 License Status Distribution")
+    st.subheader("License Status Distribution")
     c1, c2 = st.columns([1, 1])
     status_counts = filtered_df['License Status'].value_counts()
+    total = int(status_counts.sum())
 
     with c1:
+        # Suppress in-slice labels on tiny slivers — they'd render outside the slice
+        # and overflow the column. Their info still appears in the right-column
+        # breakdown and on hover.
+        text_template = [
+            f"{pct:.0%}" if pct >= 0.04 else ""
+            for pct in (status_counts.values / total)
+        ]
+
         fig = go.Figure()
         fig.add_trace(go.Pie(
             labels=status_counts.index,
             values=status_counts.values,
-            hovertemplate='<b>%{label}</b><br>Count: %{value}<br>Percentage: %{percent}<extra></extra>',
-            textinfo='label+percent',
-            textposition='auto',
-            marker=dict(line=dict(color='#000000', width=2))
+            hole=0.5,
+            hovertemplate='<b>%{label}</b><br>Count: %{value:,}<br>Percentage: %{percent}<extra></extra>',
+            text=text_template,
+            textinfo='text',
+            textposition='inside',
+            insidetextorientation='horizontal',
+            textfont=dict(color='white', size=13),
+            marker=dict(
+                colors=CATEGORICAL_SEQUENCE,
+                line=dict(color='white', width=2),
+            ),
+            sort=False,
         ))
 
         fig.update_layout(
-            title="License Status Distribution",
-            height=500,
-            showlegend=True
+            height=420,
+            showlegend=False,
+            margin=dict(l=10, r=10, t=10, b=10),
+            annotations=[dict(
+                text=f"<b>{total:,}</b><br><span style='font-size:11px;color:#64748B'>licenses</span>",
+                x=0.5, y=0.5, font=dict(size=20, color='#1E293B'),
+                showarrow=False,
+            )],
         )
 
         st.plotly_chart(fig, use_container_width=True)
 
     with c2:
-        st.markdown("**Status Breakdown:**")
-        for status, count in status_counts.items():
-            percentage = (count / len(filtered_df)) * 100
-            st.write(f"**{status}**: {count} ({percentage:.1f}%)")
+        st.markdown("**Status Breakdown**")
+        for i, (status, count) in enumerate(status_counts.items()):
+            percentage = (count / total) * 100
+            color = CATEGORICAL_SEQUENCE[i % len(CATEGORICAL_SEQUENCE)]
+            st.markdown(
+                f"<div style='display:flex;align-items:center;gap:10px;margin:6px 0;'>"
+                f"<span style='display:inline-block;width:12px;height:12px;border-radius:3px;"
+                f"background:{color};flex-shrink:0;'></span>"
+                f"<span><b>{status}</b>: {count:,} ({percentage:.1f}%)</span>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
 
 
 def plot_us_map(filtered_df):
-    """
-    Plot a choropleth map of the United States showing total licenses per state.
-    The function attempts to map common state names to USPS state codes.
-    """
+    """Plot a choropleth map of the United States showing total licenses per state."""
     if 'State' not in filtered_df.columns:
         st.info("No `State` column available for US map.")
         return
 
     state_counts = filtered_df['State'].value_counts()
 
-    # Start with all US states set to 0
     all_state_codes = list(US_STATE_TO_ABBREV.values())
     codes = all_state_codes.copy()
     values = [0] * len(all_state_codes)
     hover_text = [f"{code}: 0" for code in all_state_codes]
-    
-    # Build a mapping from code to index
+
     code_to_idx = {code: idx for idx, code in enumerate(codes)}
     unmapped = []
 
-    # Update with actual counts
     for state, count in state_counts.items():
         code = to_state_code(state)
         if code and code in code_to_idx:
@@ -728,7 +797,6 @@ def plot_us_map(filtered_df):
             values[idx] = int(count)
             hover_text[idx] = f"{state}: {count}"
         elif code:
-            # State code found but not in our list (shouldn't happen)
             codes.append(code)
             values.append(int(count))
             hover_text.append(f"{state}: {count}")
@@ -739,23 +807,23 @@ def plot_us_map(filtered_df):
         st.info("No mappable US state values found for the map.")
         return
 
-    # Cap the color scale at US_MAP_ZMAX for visual distinction across states
     fig = go.Figure(data=go.Choropleth(
         locations=codes,
         z=values,
         locationmode='USA-states',
-        colorscale='Blues',
+        colorscale=BLUE_SCALE,
         zmin=0,
         zmax=US_MAP_ZMAX,
         text=hover_text,
-        marker_line_color='black',
-        colorbar=dict(title='Licenses', ticks='outside')
+        marker_line_color=BORDER,
+        marker_line_width=0.5,
+        colorbar=dict(title='Licenses', ticks='outside', outlinewidth=0, thickness=14),
     ))
 
     fig.update_layout(
-        title_text='🗺️ CA SE licenses by Resident State',
-        geo_scope='usa',
-        height=600
+        geo=dict(scope='usa', bgcolor='white', lakecolor='white'),
+        height=560,
+        margin=dict(l=0, r=0, t=20, b=0),
     )
 
     st.plotly_chart(fig, use_container_width=True)
@@ -765,28 +833,22 @@ def plot_us_map(filtered_df):
 
 
 def plot_ca_county_map(filtered_df):
-    """
-    Plot a choropleth map of California showing total licenses per county.
-    Attempts to map county names to California county FIPS codes.
-    """
+    """Plot a choropleth map of California showing total licenses per county."""
     if 'County' not in filtered_df.columns:
         st.info("No `County` column available for California county map.")
         return
 
     county_counts = filtered_df['County'].value_counts()
 
-    # Start with all CA counties set to 0
     all_county_names = list(CA_COUNTY_FIPS.keys())
     all_fips = list(CA_COUNTY_FIPS.values())
     fips = all_fips.copy()
     values = [0] * len(all_fips)
     hover_text = [f"{name}: 0" for name in all_county_names]
-    
-    # Build a mapping from FIPS to index
+
     fips_to_idx = {code: idx for idx, code in enumerate(fips)}
     unmapped = []
 
-    # Update with actual counts
     for county, count in county_counts.items():
         code = to_county_fips(county)
         if code and code in fips_to_idx:
@@ -794,7 +856,6 @@ def plot_ca_county_map(filtered_df):
             values[idx] = int(count)
             hover_text[idx] = f"{county}: {count}"
         elif code:
-            # County code found but not in our list (shouldn't happen)
             fips.append(code)
             values.append(int(count))
             hover_text.append(f"{county}: {count}")
@@ -810,22 +871,24 @@ def plot_ca_county_map(filtered_df):
         z=values,
         locationmode='geojson-id',
         geojson='https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json',
-        colorscale='Reds',
+        colorscale=RED_SCALE,
         zmin=0,
         zmax=max(values) if values else 100,
         text=hover_text,
-        marker_line_color='black',
-        colorbar=dict(title='Licenses', ticks='outside')
+        marker_line_color=BORDER,
+        marker_line_width=0.5,
+        colorbar=dict(title='Licenses', ticks='outside', outlinewidth=0, thickness=14),
     ))
 
     fig.update_geos(
         fitbounds="locations",
-        visible=False
+        visible=False,
+        bgcolor='white',
     )
 
     fig.update_layout(
-        title_text='🗺️ CA SE Licenses by County',
-        height=600
+        height=560,
+        margin=dict(l=0, r=0, t=20, b=0),
     )
 
     st.plotly_chart(fig, use_container_width=True)
@@ -838,7 +901,7 @@ def plot_ca_county_map(filtered_df):
 
 def plot_yearly_retirements(filtered_df, start_year=None, end_year=None):
     """Bar chart of license expirations by year."""
-    st.subheader("📉 License Expirations (Retirements) by Year")
+    st.subheader("License Expirations (Retirements) by Year")
 
     if 'Expiration Date' not in filtered_df.columns:
         st.info("No Expiration Date column available.")
@@ -851,7 +914,6 @@ def plot_yearly_retirements(filtered_df, start_year=None, end_year=None):
     current_year = pd.Timestamp.now().year
     df['Exp_Year'] = df['Expiration Date'].dt.year.astype(int)
 
-    # Only past expirations (actual retirements, not future scheduled)
     df = df[df['Exp_Year'] <= current_year]
     if start_year is not None:
         df = df[df['Exp_Year'] >= int(start_year)]
@@ -865,26 +927,29 @@ def plot_yearly_retirements(filtered_df, start_year=None, end_year=None):
         st.info("No expiration data for the selected range.")
         return
 
+    show_labels = len(yearly) <= BAR_LABEL_MAX_CATEGORIES
+
     fig = go.Figure()
     fig.add_trace(go.Bar(
         x=yearly['Exp_Year'], y=yearly['Expired'],
         name='Licenses Expired', marker_color=EXPIRATION_BAR_COLOR,
-        text=yearly['Expired'], textposition='outside',
-        hovertemplate='<b>Year %{x}</b><br>Expired: %{y}<extra></extra>'
+        text=yearly['Expired'] if show_labels else None,
+        textposition='outside' if show_labels else 'none',
+        hovertemplate='<b>Year %{x}</b><br>Expired: %{y}<extra></extra>',
     ))
 
     fig.update_layout(
-        title="Structural Engineer License Expirations by Year",
         xaxis_title="Year",
         yaxis_title="Licenses Expired",
-        height=500,
+        height=460,
         showlegend=False,
-        hovermode='x unified'
+        hovermode='x unified',
+        bargap=0.18,
     )
 
     st.plotly_chart(fig, use_container_width=True)
 
-    with st.expander("📊 Expiration Statistics"):
+    with st.expander("Expiration Statistics"):
         c1, c2, c3 = st.columns(3)
         peak_idx = yearly['Expired'].idxmax()
         with c1:
@@ -898,13 +963,8 @@ def plot_yearly_retirements(filtered_df, start_year=None, end_year=None):
 # ---------- Active licenses per year ----------
 
 def plot_active_licenses_per_year(filtered_df, start_year=None, end_year=None):
-    """Area chart showing how many licenses were active at the end of each year.
-
-    A license is counted as active in year Y if:
-      - Original Issue Date <= Dec 31 of year Y  (already issued)
-      - Expiration Date     >= Jan 1 of year Y   (not yet expired)
-    """
-    st.subheader("📗 Active Licenses per Year")
+    """Area chart showing how many licenses were active at the end of each year."""
+    st.subheader("Active Licenses per Year")
 
     has_issue = 'Original Issue Date' in filtered_df.columns and pd.api.types.is_datetime64_any_dtype(filtered_df['Original Issue Date'])
     has_exp = 'Expiration Date' in filtered_df.columns and pd.api.types.is_datetime64_any_dtype(filtered_df['Expiration Date'])
@@ -933,22 +993,22 @@ def plot_active_licenses_per_year(filtered_df, start_year=None, end_year=None):
         x=years, y=active_counts,
         mode='lines+markers', fill='tozeroy',
         name='Active Licenses',
-        line=dict(color=ACTIVE_LINE_COLOR, width=2),
-        marker=dict(size=5),
-        hovertemplate='<b>%{x}</b><br>Active: %{y:,}<extra></extra>'
+        line=dict(color=ACTIVE_LINE_COLOR, width=2.5),
+        marker=dict(size=5, color=ACTIVE_LINE_COLOR),
+        fillcolor='rgba(4, 120, 87, 0.12)',
+        hovertemplate='<b>%{x}</b><br>Active: %{y:,}<extra></extra>',
     ))
 
     fig.update_layout(
-        title="Active Structural Engineer Licenses per Year",
         xaxis_title="Year",
         yaxis_title="Active Licenses",
-        height=500,
-        hovermode='x unified'
+        height=440,
+        hovermode='x unified',
     )
 
     st.plotly_chart(fig, use_container_width=True)
 
-    with st.expander("📊 Active License Statistics"):
+    with st.expander("Active License Statistics"):
         c1, c2, c3 = st.columns(3)
         peak_idx = active_counts.index(max(active_counts))
         with c1:
@@ -962,13 +1022,8 @@ def plot_active_licenses_per_year(filtered_df, start_year=None, end_year=None):
 # ---------- Average license age per year ----------
 
 def plot_avg_license_age_per_year(filtered_df, start_year=None, end_year=None):
-    """Line chart of the average age of active licenses at the end of each year.
-
-    For each year Y, age in years = (Dec 31 of Y - Original Issue Date) / 365.25,
-    averaged across all licenses active in Y (same active definition used by
-    plot_active_licenses_per_year).
-    """
-    st.subheader("📐 Average Age of Active Licenses by Year")
+    """Line chart of the average age of active licenses at the end of each year."""
+    st.subheader("Average Age of Active Licenses by Year")
 
     has_issue = 'Original Issue Date' in filtered_df.columns and pd.api.types.is_datetime64_any_dtype(filtered_df['Original Issue Date'])
     has_exp = 'Expiration Date' in filtered_df.columns and pd.api.types.is_datetime64_any_dtype(filtered_df['Expiration Date'])
@@ -1008,18 +1063,17 @@ def plot_avg_license_age_per_year(filtered_df, start_year=None, end_year=None):
         x=years, y=avg_ages,
         mode='lines+markers',
         name='Average License Age',
-        line=dict(color='mediumpurple', width=2),
-        marker=dict(size=5),
+        line=dict(color=PURPLE, width=2.5),
+        marker=dict(size=5, color=PURPLE),
         customdata=active_counts,
-        hovertemplate='<b>%{x}</b><br>Avg Age: %{y:.1f} yrs<br>Active Licenses: %{customdata:,}<extra></extra>'
+        hovertemplate='<b>%{x}</b><br>Avg Age: %{y:.1f} yrs<br>Active Licenses: %{customdata:,}<extra></extra>',
     ))
 
     fig.update_layout(
-        title="Average Age of Active Structural Engineer Licenses by Year",
         xaxis_title="Year",
         yaxis_title="Average Age (years)",
-        height=500,
-        hovermode='x unified'
+        height=440,
+        hovermode='x unified',
     )
 
     st.plotly_chart(fig, use_container_width=True)
@@ -1029,7 +1083,7 @@ def plot_avg_license_age_per_year(filtered_df, start_year=None, end_year=None):
         ages_only = [a for _, a in valid]
         min_idx = ages_only.index(min(ages_only))
         max_idx = ages_only.index(max(ages_only))
-        with st.expander("📊 Average Age Statistics"):
+        with st.expander("Average Age Statistics"):
             c1, c2, c3 = st.columns(3)
             with c1:
                 st.metric("Youngest Cohort Year", f"{valid[min_idx][0]} ({valid[min_idx][1]:.1f} yrs)")
@@ -1042,36 +1096,46 @@ def plot_avg_license_age_per_year(filtered_df, start_year=None, end_year=None):
 def display_summary_metrics(filtered_df):
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("📊 Total Records", f"{len(filtered_df):,}" if filtered_df is not None else "0")
+        st.metric("Total Records", f"{len(filtered_df):,}" if filtered_df is not None else "0")
     with col2:
-        st.metric("🗺️ States*", filtered_df['State'].nunique() if (filtered_df is not None and 'State' in filtered_df.columns) else 0)
+        st.metric("States*", filtered_df['State'].nunique() if (filtered_df is not None and 'State' in filtered_df.columns) else 0)
     with col3:
         if filtered_df is not None and 'Expiration Date' in filtered_df.columns:
             current_date = pd.Timestamp.now()
             active_licenses = len(filtered_df[filtered_df['Expiration Date'] >= current_date])
-            st.metric("✅ Active Licenses", f"{active_licenses:,}")
+            st.metric("Active Licenses", f"{active_licenses:,}")
         else:
-            st.metric("✅ Active Licenses", "0")
+            st.metric("Active Licenses", "0")
     with col4:
         if filtered_df is not None and 'Original Issue Date' in filtered_df.columns and pd.api.types.is_datetime64_any_dtype(filtered_df['Original Issue Date']):
-            date_range = f"{filtered_df['Original Issue Date'].dt.year.min()}-{filtered_df['Original Issue Date'].dt.year.max()}"
-            st.metric("📅 Year Range", date_range)
+            date_range = f"{filtered_df['Original Issue Date'].dt.year.min()}–{filtered_df['Original Issue Date'].dt.year.max()}"
+            st.metric("Year Range", date_range)
         else:
-            st.metric("📅 Year Range", "N/A")
+            st.metric("Year Range", "N/A")
 
-    # Clarifying note for States metric
     st.caption("*Includes U.S. territories (DC, GU, PR), Armed Forces jurisdictions (AP), and international license holders. Total count may exceed 50 states.")
+
 
 # ---------- App ----------
 def main():
-    st.set_page_config(page_title="SE License Dashboard", page_icon="🏗️", layout="wide", initial_sidebar_state="expanded")
+    st.set_page_config(
+        page_title="SE License Dashboard",
+        page_icon="🏗️",
+        layout="wide",
+        initial_sidebar_state="expanded",
+    )
+
+    # Apply unified visual theme
+    st.markdown(DASHBOARD_CSS, unsafe_allow_html=True)
+
     st.title("🏗️ Structural Engineers License Dashboard")
-    st.markdown("Interactive dashboard for analyzing structural engineer license data")
-    st.markdown("---")
+    st.markdown(
+        '<p class="dashboard-subtitle">Interactive view of California structural engineer license data from the DCA public record.</p>',
+        unsafe_allow_html=True,
+    )
 
-    st.sidebar.title("📁 Data Source")
+    st.sidebar.title("Data Source")
 
-    # Default repo-bundled CSV path (without extension, will be added automatically)
     default_csv = "ProfEngrsLandSurvyrsGeologist_Data00.xls_structural_engineers_cleaned"
     src = resolve_data_source(default_csv)
 
@@ -1079,17 +1143,14 @@ def main():
     if src:
         with st.spinner("Loading cleaned data..."):
             df = load_cleaned_data(src, _file_mtime=_file_hash(src))
-            # Ensure date columns are parsed consistently for the rest of the app
             df = parse_dates(df)
             if df is not None:
-                st.sidebar.success(f"✅ Loaded: {Path(src).name}")
-                # Data freshness indicator
+                st.sidebar.success(f"Loaded: {Path(src).name}")
                 if 'Dashboard_Updated' in df.columns:
                     latest = df['Dashboard_Updated'].dropna()
                     if not latest.empty:
                         st.sidebar.caption(f"Data processed: {latest.iloc[0]}")
-    
-    # If no file found automatically, show upload option
+
     if df is None:
         st.sidebar.warning("No CSV file found automatically.")
         st.sidebar.markdown("**Please upload your CSV file:**")
@@ -1102,7 +1163,7 @@ def main():
     if df is None or df.empty:
         st.error("Unable to load data from the CSV file.")
         st.info("""
-**Expected columns (case sensitive):**  
+**Expected columns (case sensitive):**
 `State`, `License Status`, `Original Issue Date`, `Expiration Date`
 
 **To get started:**
@@ -1112,39 +1173,34 @@ def main():
         """)
         return
 
-    st.success(f"✅ Successfully loaded {len(df):,} Structural Engineer records")
+    # Dev-only column inspector — enable with ?debug=1 in the URL
+    if st.query_params.get('debug') == '1':
+        with st.expander("Data Column Information (debug)"):
+            st.write("**Available columns:**")
+            for col in df.columns:
+                st.write(f"- `{col}` ({df[col].dtype})")
+            st.write(f"\n**Data shape:** {df.shape[0]} rows x {df.shape[1]} columns")
 
-    # Show column info for debugging
-    with st.expander("📋 Data Column Information"):
-        st.write("**Available columns:**")
-        for col in df.columns:
-            st.write(f"- `{col}` ({df[col].dtype})")
-        
-        st.write(f"\n**Data shape:** {df.shape[0]} rows x {df.shape[1]} columns")
-
-    # Seed widget defaults from URL query params (first load only)
     _init_filters_from_url(df)
 
-    # Filters
     filters = create_filters(df)
 
-    # Shareable URL button
     st.sidebar.markdown("---")
     if st.sidebar.button("Share current filters"):
         st.query_params.from_dict(_build_share_params(filters))
         st.sidebar.success("URL updated — copy it from your browser address bar.")
 
-    full_df = df.copy()  # Keep unfiltered copy for comparison overlay
+    full_df = df.copy()
     filtered_df = apply_filters(df, filters)
 
-    # Metrics
-    st.subheader("📊 Summary Metrics")
-    display_summary_metrics(filtered_df)
-    st.markdown("---")
+    # Filter summary chip bar
+    _render_filter_chips(filters, df)
 
-    # Visuals
+    # Metrics
+    display_summary_metrics(filtered_df)
+
     if filtered_df is None or filtered_df.empty:
-        st.warning("🔍 No records match the selected filters. Try adjusting your filter criteria.")
+        st.warning("No records match the selected filters. Try adjusting your filter criteria.")
         return
 
     create_visualizations(
@@ -1153,7 +1209,7 @@ def main():
         filters.get('start_year'),
         filters.get('end_year'),
         filters.get('comparison_state'),
-        full_df
+        full_df,
     )
 
 
