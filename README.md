@@ -69,7 +69,8 @@ CA License Dashboard/
 ├── dashboard_lib/                        # Extracted helpers
 │   ├── timeline.py                       # Timeline event loading + hover formatting
 │   ├── periods.py                        # Period bucketing primitives
-│   └── geo.py                            # State/county name → code lookups
+│   ├── geo.py                            # State/county name → code lookups
+│   └── theme.py                          # Unified palette, Plotly template, CSS overrides
 ├── data/                                 # Tracked CSV data (auto-populated by pipeline)
 │   ├── ProfEngrsLandSurvyrsGeologist_Data00_structural_engineers_cleaned.csv
 │   ├── timeline_events.csv               # Timeline event annotations
@@ -122,11 +123,29 @@ CA License Dashboard/
 - Streamlit Cloud sees the new data once you commit `data/`.
 
 ### Interactive Dashboard
-- **Real-time filtering** - By state, license status, date ranges
-- **Interactive visualizations** - Built with Plotly for better user experience
-- **Comparison overlays** - Compare license counts between states
-- **Geographic maps** - US choropleth and California county maps
-- **Responsive design** - Works on desktop and mobile
+- **Tabbed layout** — Activity / Geography / Status, replacing a single long scroll
+- **Filter chip summary** — chip bar above the metrics shows only the filters that differ from defaults, with a quiet "No filters applied" state when clean
+- **Unified visual theme** — single palette, Plotly template, and CSS injected from `dashboard_lib/theme.py` so every chart, card, tab, and chip reads as one design
+- **Real-time filtering** — by state, license status, year range, and active/expired
+- **Comparison overlays** — overlay a second state on the time-series bar chart
+- **Geographic maps** — US choropleth and California county choropleth
+- **Shareable URLs** — "Share current filters" writes the current filter state into URL query params
+- **Debug expander** — `?debug=1` exposes the column-info expander; hidden from public viewers by default
+
+#### Charts (Activity tab)
+1. **Licenses Issued Over Time** — bar chart with Yearly/Half-Yearly/Quarterly/Monthly bucketing; supports comparison-state overlay and timeline-event markers
+2. **Licenses Over Time (line)** — individual licenses by Original Issue Date with optional event vertical lines
+3. **License Expirations (Retirements) by Year** — bar chart of past expirations
+4. **Active Licenses per Year** — area chart counting licenses active at the end of each year (issued ≤ Dec 31, expiration ≥ Jan 1)
+5. **Average Age of Active Licenses by Year** — line chart of mean issue-to-year-end age for the active cohort each year
+
+#### Charts (Geography tab)
+- **Licenses by State** bar chart + Top 5 callout
+- **US choropleth** (Blues scale, capped at zmax for visual range)
+- **California Licenses by County** choropleth (Reds scale)
+
+#### Charts (Status tab)
+- **License Status Distribution** donut with in-slice percentages, color-coded breakdown legend, and a center "N licenses" total
 
 ### Automation Features
 - **Pipeline coordination** - Run entire pipeline with single command
@@ -157,7 +176,7 @@ python tools/reprocess_timeline.py
 ```
 
 Notes:
-- The events toggle is under "Data Filters" in the sidebar.
+- The events toggle is at the top of the "Filters" section in the sidebar.
 - Date filters constrain both charts and events; events do not extend axes.
 
 ## Troubleshooting
@@ -227,13 +246,22 @@ For issues or questions:
 - **v2.0**: Enhanced data processor with corruption handling
 - **v3.0**: Added pipeline coordinator and automation scripts
 - **v4.0**: Complete integrated pipeline with robust error handling
-- **Current** (2026-05): Drop-off reconciliation + HTML rescan flow
+- **2026-05a**: Drop-off reconciliation + HTML rescan flow
   - Reconciler flips dropped licenses to `Cancelled` with `Status_Changed_Date` stamping
   - New `--source feed|html` flag separates feed snapshots from gap-fill batches
   - HTML fetcher gains `--rescan` mode driven by `licenses/needs_rescan.txt`
   - HTML parser auto-merges into master on completion
   - Processor auto-publishes cleaned CSV to `data/` so the dashboard always sees fresh data
-  - Pipeline entry points (`run_pipeline.bat`, `run_dashboard.bat`) live at the project root
+  - Pipeline entry points (`run_pipeline.bat`, `run_dashboard.bat`) at the project root (local-only, gitignored)
   - Pipeline coordinator self-locates; hardcoded feed filename guards against picking the master file as input
   - Emojis stripped from all processing scripts (Windows cp1252 console compatibility)
   - Date columns normalized before row diff to prevent spurious `Last_Updated` churn
+- **Current** (2026-05): Dashboard visual refresh
+  - New `dashboard_lib/theme.py` centralizes the palette, Plotly template, and Streamlit CSS
+  - Charts reorganized into Activity / Geography / Status tabs
+  - Filter chip summary bar shows non-default filters above the metrics
+  - Metric cards, sidebar, tabs, buttons styled via injected CSS for a consistent feel
+  - Status donut redesigned: in-slice labels, color-coded breakdown legend, center total
+  - Conditional bar labels on long time-series and state charts (hidden when category count is high)
+  - Average license age per year chart (added 2026-04) is now part of the Activity tab
+  - Column-info expander gated behind `?debug=1`; redundant load banner removed
