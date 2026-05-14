@@ -344,6 +344,10 @@ def create_visualizations(filtered_df, show_events: bool, start_year: Optional[i
     plot_active_licenses_per_year(filtered_df, start_year=start_year, end_year=end_year)
     st.markdown("---")
 
+    # Average license age per year
+    plot_avg_license_age_per_year(filtered_df, start_year=start_year, end_year=end_year)
+    st.markdown("---")
+
     # By State
     if 'State' in filtered_df.columns and filtered_df['State'].nunique() > 1:
         plot_state_counts(filtered_df)
@@ -953,6 +957,86 @@ def plot_active_licenses_per_year(filtered_df, start_year=None, end_year=None):
             st.metric("Peak Count", f"{max(active_counts):,}")
         with c3:
             st.metric("Current", f"{active_counts[-1]:,}" if active_counts else "N/A")
+
+
+# ---------- Average license age per year ----------
+
+def plot_avg_license_age_per_year(filtered_df, start_year=None, end_year=None):
+    """Line chart of the average age of active licenses at the end of each year.
+
+    For each year Y, age in years = (Dec 31 of Y - Original Issue Date) / 365.25,
+    averaged across all licenses active in Y (same active definition used by
+    plot_active_licenses_per_year).
+    """
+    st.subheader("📐 Average Age of Active Licenses by Year")
+
+    has_issue = 'Original Issue Date' in filtered_df.columns and pd.api.types.is_datetime64_any_dtype(filtered_df['Original Issue Date'])
+    has_exp = 'Expiration Date' in filtered_df.columns and pd.api.types.is_datetime64_any_dtype(filtered_df['Expiration Date'])
+    if not has_issue or not has_exp:
+        st.info("Both Original Issue Date and Expiration Date are needed for this chart.")
+        return
+
+    df = filtered_df.dropna(subset=['Original Issue Date', 'Expiration Date']).copy()
+    if df.empty:
+        st.info("No records with both issue and expiration dates.")
+        return
+
+    min_year = int(df['Original Issue Date'].dt.year.min()) if start_year is None else int(start_year)
+    max_year = int(pd.Timestamp.now().year) if end_year is None else min(int(end_year), pd.Timestamp.now().year)
+
+    years = list(range(min_year, max_year + 1))
+    avg_ages = []
+    active_counts = []
+    for y in years:
+        yr_start = pd.Timestamp(f"{y}-01-01")
+        yr_end = pd.Timestamp(f"{y}-12-31")
+        active = df[(df['Original Issue Date'] <= yr_end) & (df['Expiration Date'] >= yr_start)]
+        if active.empty:
+            avg_ages.append(None)
+            active_counts.append(0)
+        else:
+            ages_years = (yr_end - active['Original Issue Date']).dt.days / 365.25
+            avg_ages.append(float(ages_years.mean()))
+            active_counts.append(int(len(active)))
+
+    if not any(a is not None for a in avg_ages):
+        st.info("No active licenses in the selected year range.")
+        return
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=years, y=avg_ages,
+        mode='lines+markers',
+        name='Average License Age',
+        line=dict(color='mediumpurple', width=2),
+        marker=dict(size=5),
+        customdata=active_counts,
+        hovertemplate='<b>%{x}</b><br>Avg Age: %{y:.1f} yrs<br>Active Licenses: %{customdata:,}<extra></extra>'
+    ))
+
+    fig.update_layout(
+        title="Average Age of Active Structural Engineer Licenses by Year",
+        xaxis_title="Year",
+        yaxis_title="Average Age (years)",
+        height=500,
+        hovermode='x unified'
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    valid = [(y, a) for y, a in zip(years, avg_ages) if a is not None]
+    if valid:
+        ages_only = [a for _, a in valid]
+        min_idx = ages_only.index(min(ages_only))
+        max_idx = ages_only.index(max(ages_only))
+        with st.expander("📊 Average Age Statistics"):
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.metric("Youngest Cohort Year", f"{valid[min_idx][0]} ({valid[min_idx][1]:.1f} yrs)")
+            with c2:
+                st.metric("Oldest Cohort Year", f"{valid[max_idx][0]} ({valid[max_idx][1]:.1f} yrs)")
+            with c3:
+                st.metric("Most Recent Year", f"{valid[-1][0]} ({valid[-1][1]:.1f} yrs)")
 
 
 def display_summary_metrics(filtered_df):
