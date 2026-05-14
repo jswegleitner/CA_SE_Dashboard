@@ -36,6 +36,14 @@ venv/
 .vscode/
 .idea/
 
+# Claude Code (local agent config + project notes)
+.claude/
+CLAUDE.md
+
+# Local one-click entry points (not relevant to public viewers)
+run_dashboard.bat
+run_pipeline.bat
+
 # OS
 Thumbs.db
 .DS_Store
