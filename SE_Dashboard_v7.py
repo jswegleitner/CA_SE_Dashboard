@@ -197,11 +197,6 @@ def _init_filters_from_url(df):
     if 'compare' in params and 'comparison_state' not in st.session_state:
         st.session_state['comparison_state'] = params['compare']
 
-    if 'exp' in params and 'expired_filter' not in st.session_state:
-        url_exp = [s.strip() for s in params['exp'].split(',') if s.strip()]
-        if url_exp:
-            st.session_state['expired_filter'] = url_exp
-
 
 def _build_share_params(filters: dict) -> dict:
     """Build a dict of query-param key/values from the current filter state."""
@@ -216,8 +211,6 @@ def _build_share_params(filters: dict) -> dict:
         params['end_year'] = str(filters['end_year'])
     if filters.get('comparison_state') and filters['comparison_state'] != 'None':
         params['compare'] = filters['comparison_state']
-    if filters.get('expiration_types'):
-        params['exp'] = ','.join(filters['expiration_types'])
     return params
 
 
@@ -254,10 +247,6 @@ def _render_filter_chips(filters: dict, df: pd.DataFrame):
     sy, ey = filters.get('start_year'), filters.get('end_year')
     if sy is not None and ey is not None and (sy != full_min or ey != full_max):
         chips.append(("Years", f"{sy}–{ey}"))
-
-    exp = filters.get('expiration_types') or []
-    if exp and set(exp) != {'Active Only', 'Expired Only'}:
-        chips.append(("Show", ", ".join(exp).replace(' Only', '')))
 
     cmp_state = filters.get('comparison_state')
     if cmp_state and cmp_state != 'None':
@@ -331,15 +320,6 @@ def create_filters(df):
         key='date_range_slider',
     )
 
-    expiration_options = ['Active Only', 'Expired Only']
-    filters['expiration_types'] = st.sidebar.multiselect(
-        "License Expiration Status:",
-        options=expiration_options,
-        default=expiration_options,
-        key='expired_filter',
-        help="Active = not yet expired, Expired = past expiration date. Select both for all licenses.",
-    )
-
     if not events_df_present:
         st.sidebar.caption("Add `timeline_events.csv` with columns: start_date, end_date (optional), label, description, type.")
     return filters
@@ -364,22 +344,10 @@ def apply_filters(df, filters):
         )
         filtered_df = filtered_df[mask]
 
-    if 'Expiration Date' in filtered_df.columns and pd.api.types.is_datetime64_any_dtype(filtered_df['Expiration Date']):
-        current_date = pd.Timestamp.now()
-        if filters['expiration_types']:
-            inc_active = 'Active Only' in filters['expiration_types']
-            inc_expired = 'Expired Only' in filters['expiration_types']
-            mask = pd.Series(False, index=filtered_df.index)
-            if inc_active:
-                mask = mask | (filtered_df['Expiration Date'] >= current_date)
-            if inc_expired:
-                mask = mask | (filtered_df['Expiration Date'] < current_date)
-            filtered_df = filtered_df[mask]
-
     return filtered_df
 
 
-def create_visualizations(filtered_df, show_events: bool, start_year: Optional[int] = None, end_year: Optional[int] = None, comparison_state: str = None, full_df=None):
+def create_visualizations(filtered_df, show_events: bool, start_year: Optional[int] = None, end_year: Optional[int] = None, comparison_state: str = None, full_df=None, status_agnostic_df=None):
     if filtered_df is None or filtered_df.empty:
         st.warning("No data to visualize with current filters.")
         return
@@ -417,8 +385,9 @@ def create_visualizations(filtered_df, show_events: bool, start_year: Optional[i
         plot_time_series(filtered_df, bucket_size, lock_y, events_df=events_df, show_events=show_events, start_year=start_year, end_year=end_year, comparison_state=comparison_state, full_df=full_df)
         plot_time_series_line(filtered_df, lock_y, events_df=events_df, show_events=show_events, start_year=start_year, end_year=end_year)
         plot_yearly_retirements(filtered_df, start_year=start_year, end_year=end_year)
-        plot_active_licenses_per_year(filtered_df, start_year=start_year, end_year=end_year)
-        plot_avg_license_age_per_year(filtered_df, start_year=start_year, end_year=end_year)
+        active_df = status_agnostic_df if status_agnostic_df is not None else filtered_df
+        plot_active_licenses_per_year(active_df, start_year=start_year, end_year=end_year)
+        plot_avg_license_age_per_year(active_df, start_year=start_year, end_year=end_year)
 
     # ---------- Geography tab ----------
     if has_geo:
@@ -554,6 +523,25 @@ def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_
         with c3: st.metric("Average per Period", f"{license_counts.mean():.1f}")
 
 
+def _detect_issue_date_anomalies(df_line: pd.DataFrame, license_col: str, window: int = 51, min_diff_years: float = 5.0) -> pd.DataFrame:
+    """Flag rows whose Original Issue Date is far later than their License Number suggests.
+
+    License numbers are assigned sequentially, so the issue year of each license should
+    track its neighbors in license-number order. When DCA backfills a reciprocity/reissue,
+    it stamps the *reactivation* date into Original Issue Date — those rows show up as
+    large deviations from the rolling median of nearby license numbers' issue years.
+    """
+    df = df_line.copy()
+    df['__lic_num'] = pd.to_numeric(df[license_col], errors='coerce')
+    df = df.dropna(subset=['__lic_num']).sort_values('__lic_num').reset_index(drop=True)
+    if len(df) < 10:
+        return df.iloc[0:0]
+    df['__issue_year'] = df['Original Issue Date'].dt.year
+    df['__expected'] = df['__issue_year'].rolling(window=window, center=True, min_periods=10).median()
+    df['__diff'] = df['__issue_year'] - df['__expected']
+    return df[df['__diff'] >= min_diff_years].copy()
+
+
 def plot_time_series_line(filtered_df, lock_y: bool = True, events_df: Optional[pd.DataFrame] = None, show_events: bool = False, start_year: Optional[int] = None, end_year: Optional[int] = None):
     """
     Line chart of licenses over time. X axis is the Original Issue Date and Y is
@@ -603,6 +591,32 @@ def plot_time_series_line(filtered_df, lock_y: bool = True, events_df: Optional[
         marker=dict(size=4, color=MAIN_BAR_COLOR),
         hovertemplate='<b>Date:</b> %{x|%Y-%m-%d}<br><b>Value:</b> %{y}<extra></extra>',
     ))
+
+    anomalies = _detect_issue_date_anomalies(df_line, license_col) if license_col else None
+    if anomalies is not None and not anomalies.empty:
+        fig.add_trace(go.Scatter(
+            x=anomalies['Original Issue Date'],
+            y=anomalies['__lic_num'],
+            mode='markers',
+            name='Likely reissue / reciprocity',
+            marker=dict(
+                size=11,
+                color=ACCENT,
+                symbol='diamond',
+                line=dict(color='white', width=1.5),
+            ),
+            customdata=anomalies[['__expected', '__diff']].values,
+            hovertemplate=(
+                '<b>License #%{y}</b><br>'
+                'Issue Date: %{x|%Y-%m-%d}<br>'
+                'Expected era (from neighbors): ~%{customdata[0]:.0f}<br>'
+                'Off by ~%{customdata[1]:.0f} years<br>'
+                '<i>Likely a reciprocity or reissue entry — DCA appears to have '
+                'stamped the reactivation date into the Original Issue Date field.</i>'
+                '<extra></extra>'
+            ),
+            showlegend=True,
+        ))
 
     fig.update_layout(
         xaxis_title="Original Issue Date",
@@ -674,6 +688,14 @@ def plot_time_series_line(filtered_df, lock_y: bool = True, events_df: Optional[
                     fig.add_annotation(x=xdt, y=y_min - head * 0.3, text=year_txt,
                                        showarrow=False, font=dict(color=EVENT_MARKER_COLOR, size=10))
 
+    if anomalies is not None and not anomalies.empty:
+        st.caption(
+            f"Amber diamonds flag {len(anomalies)} license(s) whose Original Issue Date "
+            "appears far later than their License Number would suggest — most likely "
+            "reciprocity reinstatements or DCA database backfills where the reactivation "
+            "date overwrote the original issuance. Hover a marker for details."
+        )
+
     st.plotly_chart(fig, use_container_width=True)
 
 
@@ -715,6 +737,10 @@ def plot_state_counts(filtered_df):
 
 def plot_status_pie(filtered_df):
     st.subheader("License Status Distribution")
+    st.caption(
+        "Definitions for each license status are available on the "
+        "[BPELSG license lookup page](https://www.bpelsg.ca.gov/consumers/lic_lookup.shtml)."
+    )
     c1, c2 = st.columns([1, 1])
     status_counts = filtered_df['License Status'].value_counts()
     total = int(status_counts.sum())
@@ -900,8 +926,14 @@ def plot_ca_county_map(filtered_df):
 # ---------- Yearly retirements (expirations) ----------
 
 def plot_yearly_retirements(filtered_df, start_year=None, end_year=None):
-    """Bar chart of license expirations by year."""
+    """Bar chart of license retirements by year (non-Active statuses, completed years only)."""
     st.subheader("License Expirations (Retirements) by Year")
+    st.caption(
+        "Counts licenses whose status is no longer Active (Cancelled, Retired, Deceased, "
+        "Delinquent, Revoked, Voluntary Surrender) grouped by the year their Expiration Date falls in. "
+        "The current year is excluded because the renewal cycle is still in progress — "
+        "active licenses pending renewal would otherwise inflate this year's bar."
+    )
 
     if 'Expiration Date' not in filtered_df.columns:
         st.info("No Expiration Date column available.")
@@ -909,16 +941,22 @@ def plot_yearly_retirements(filtered_df, start_year=None, end_year=None):
     if not pd.api.types.is_datetime64_any_dtype(filtered_df['Expiration Date']):
         st.info("Expiration Date is not in datetime format.")
         return
+    if 'License Status' not in filtered_df.columns:
+        st.info("License Status column is required to identify retirements.")
+        return
 
     df = filtered_df.dropna(subset=['Expiration Date']).copy()
+    df = df[df['License Status'].fillna('').str.strip().str.lower() != 'active']
+
     current_year = pd.Timestamp.now().year
+    last_complete_year = current_year - 1
     df['Exp_Year'] = df['Expiration Date'].dt.year.astype(int)
 
-    df = df[df['Exp_Year'] <= current_year]
+    df = df[df['Exp_Year'] <= last_complete_year]
     if start_year is not None:
         df = df[df['Exp_Year'] >= int(start_year)]
     if end_year is not None:
-        df = df[df['Exp_Year'] <= min(int(end_year), current_year)]
+        df = df[df['Exp_Year'] <= min(int(end_year), last_complete_year)]
 
     yearly = df.groupby('Exp_Year').size().reset_index(name='Expired')
     yearly = yearly.sort_values('Exp_Year')
@@ -965,6 +1003,11 @@ def plot_yearly_retirements(filtered_df, start_year=None, end_year=None):
 def plot_active_licenses_per_year(filtered_df, start_year=None, end_year=None):
     """Area chart showing how many licenses were active at the end of each year."""
     st.subheader("Active Licenses per Year")
+    st.caption(
+        "Counts licenses that were active during each year (issued on or before Dec 31, "
+        "expiration on or after Jan 1). Ignores the License Status sidebar filter so the "
+        "historical view stays consistent."
+    )
 
     has_issue = 'Original Issue Date' in filtered_df.columns and pd.api.types.is_datetime64_any_dtype(filtered_df['Original Issue Date'])
     has_exp = 'Expiration Date' in filtered_df.columns and pd.api.types.is_datetime64_any_dtype(filtered_df['Expiration Date'])
@@ -1024,6 +1067,10 @@ def plot_active_licenses_per_year(filtered_df, start_year=None, end_year=None):
 def plot_avg_license_age_per_year(filtered_df, start_year=None, end_year=None):
     """Line chart of the average age of active licenses at the end of each year."""
     st.subheader("Average Age of Active Licenses by Year")
+    st.caption(
+        "Average issue-to-year-end age of licenses active during each year. Ignores the "
+        "License Status sidebar filter so the historical view stays consistent."
+    )
 
     has_issue = 'Original Issue Date' in filtered_df.columns and pd.api.types.is_datetime64_any_dtype(filtered_df['Original Issue Date'])
     has_exp = 'Expiration Date' in filtered_df.columns and pd.api.types.is_datetime64_any_dtype(filtered_df['Expiration Date'])
@@ -1192,6 +1239,7 @@ def main():
 
     full_df = df.copy()
     filtered_df = apply_filters(df, filters)
+    status_agnostic_df = apply_filters(df, {**filters, 'statuses': []})
 
     # Filter summary chip bar
     _render_filter_chips(filters, df)
@@ -1210,6 +1258,7 @@ def main():
         filters.get('end_year'),
         filters.get('comparison_state'),
         full_df,
+        status_agnostic_df,
     )
 
 

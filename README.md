@@ -126,7 +126,7 @@ CA License Dashboard/
 - **Tabbed layout** — Activity / Geography / Status, replacing a single long scroll
 - **Filter chip summary** — chip bar above the metrics shows only the filters that differ from defaults, with a quiet "No filters applied" state when clean
 - **Unified visual theme** — single palette, Plotly template, and CSS injected from `dashboard_lib/theme.py` so every chart, card, tab, and chip reads as one design
-- **Real-time filtering** — by state, license status, year range, and active/expired
+- **Real-time filtering** — by state, license status, year range, and comparison state. The historical-cohort charts (Active Licenses, Average Age) bypass the License Status filter so picking "Active" doesn't collapse the past-year view.
 - **Comparison overlays** — overlay a second state on the time-series bar chart
 - **Geographic maps** — US choropleth and California county choropleth
 - **Shareable URLs** — "Share current filters" writes the current filter state into URL query params
@@ -134,10 +134,10 @@ CA License Dashboard/
 
 #### Charts (Activity tab)
 1. **Licenses Issued Over Time** — bar chart with Yearly/Half-Yearly/Quarterly/Monthly bucketing; supports comparison-state overlay and timeline-event markers
-2. **Licenses Over Time (line)** — individual licenses by Original Issue Date with optional event vertical lines
-3. **License Expirations (Retirements) by Year** — bar chart of past expirations
-4. **Active Licenses per Year** — area chart counting licenses active at the end of each year (issued ≤ Dec 31, expiration ≥ Jan 1)
-5. **Average Age of Active Licenses by Year** — line chart of mean issue-to-year-end age for the active cohort each year
+2. **Licenses Over Time (line)** — individual licenses by Original Issue Date with optional event vertical lines. Overlays amber diamond markers on data anomalies (licenses whose Issue Date is far later than their License Number suggests — almost always reciprocity reinstatements or DCA backfills) with an explanatory tooltip and caption.
+3. **License Expirations (Retirements) by Year** — bar chart of true retirements per year. Filters to non-Active statuses (Cancelled, Retired, Deceased, Delinquent, Revoked, Voluntary Surrender) and excludes the current year so the in-progress renewal cycle doesn't dominate.
+4. **Active Licenses per Year** — area chart counting licenses active at the end of each year (issued ≤ Dec 31, expiration ≥ Jan 1). Ignores the License Status sidebar filter so the historical view stays consistent.
+5. **Average Age of Active Licenses by Year** — line chart of mean issue-to-year-end age for the active cohort each year. Same status-filter-bypass as chart 4.
 
 #### Charts (Geography tab)
 - **Licenses by State** bar chart + Top 5 callout
@@ -145,7 +145,7 @@ CA License Dashboard/
 - **California Licenses by County** choropleth (Reds scale)
 
 #### Charts (Status tab)
-- **License Status Distribution** donut with in-slice percentages, color-coded breakdown legend, and a center "N licenses" total
+- **License Status Distribution** donut with in-slice percentages, color-coded breakdown legend, and a center "N licenses" total. Caption links to the [BPELSG license lookup page](https://www.bpelsg.ca.gov/consumers/lic_lookup.shtml) where each status is defined.
 
 ### Automation Features
 - **Pipeline coordination** - Run entire pipeline with single command
@@ -256,7 +256,7 @@ For issues or questions:
   - Pipeline coordinator self-locates; hardcoded feed filename guards against picking the master file as input
   - Emojis stripped from all processing scripts (Windows cp1252 console compatibility)
   - Date columns normalized before row diff to prevent spurious `Last_Updated` churn
-- **Current** (2026-05): Dashboard visual refresh
+- **2026-05a**: Dashboard visual refresh
   - New `dashboard_lib/theme.py` centralizes the palette, Plotly template, and Streamlit CSS
   - Charts reorganized into Activity / Geography / Status tabs
   - Filter chip summary bar shows non-default filters above the metrics
@@ -265,3 +265,9 @@ For issues or questions:
   - Conditional bar labels on long time-series and state charts (hidden when category count is high)
   - Average license age per year chart (added 2026-04) is now part of the Activity tab
   - Column-info expander gated behind `?debug=1`; redundant load banner removed
+- **Current** (2026-05): Chart-semantics cleanup + anomaly detection
+  - **Active Licenses / Average Age charts** now bypass the License Status sidebar filter. Picking "Active" in the sidebar was silently collapsing the historical cohort (every past-year license that has since changed status would drop). `main()` now builds a second `status_agnostic_df` and routes it to these two charts. Both gained captions explaining their per-year logic.
+  - **License Expirations (Retirements) by Year** now filters to non-Active statuses (Cancelled, Retired, Deceased, Delinquent, Revoked, Voluntary Surrender) and excludes the current year. The previous chart's giant current-year spike was the in-progress renewal cycle (active licenses whose 2-year cycle ends this year and haven't renewed yet), not real retirements. A caption explains both rules.
+  - **License Expiration Status filter removed** from the sidebar — the "Active Only / Expired Only" multiselect duplicated the License Status filter and made the time-window charts misleading. URL share params, filter chips, and the apply-filters branch all cleaned up.
+  - **License Status Distribution caption** now links to the BPELSG license lookup page where each status is defined.
+  - **Issue-date anomaly detection** on the line chart. `_detect_issue_date_anomalies()` sorts by License Number, computes a rolling 51-row median of issue years, and flags rows whose actual issue year exceeds the local median by ≥ 5 years. `plot_time_series_line` overlays each as an amber diamond marker with a tooltip explaining the discrepancy. These rows are almost always reciprocity reinstatements or DCA database backfills where the agency stamped the *reactivation* date into the Original Issue Date field rather than preserving the true first issuance — the bad dates cluster on specific batch days (`2002-07-26`, `1987-02-27`) and most are `Out Of State` county. Detection is data-driven and refreshes each month with no maintenance.
