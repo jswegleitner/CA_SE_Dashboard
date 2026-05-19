@@ -1166,7 +1166,7 @@ def display_summary_metrics(filtered_df):
 # ---------- App ----------
 def main():
     st.set_page_config(
-        page_title="SE License Dashboard",
+        page_title="CA SE License Statistics",
         page_icon="🏗️",
         layout="wide",
         initial_sidebar_state="expanded",
@@ -1175,7 +1175,7 @@ def main():
     # Apply unified visual theme
     st.markdown(DASHBOARD_CSS, unsafe_allow_html=True)
 
-    st.title("🏗️ Structural Engineers License Dashboard")
+    st.title("🏗️ Statistics for the California Structural Engineer License")
     st.markdown(
         '<p class="dashboard-subtitle">Interactive view of California structural engineer license data from the DCA public record.</p>',
         unsafe_allow_html=True,
