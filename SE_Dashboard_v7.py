@@ -11,6 +11,7 @@ Usage:
     streamlit run SE_Dashboard_v7.py --server.headless true
 """
 from pathlib import Path
+from datetime import datetime
 import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
@@ -1175,16 +1176,25 @@ def main():
     # Apply unified visual theme
     st.markdown(DASHBOARD_CSS, unsafe_allow_html=True)
 
-    st.title("🏗️ Statistics for the California Structural Engineer License")
-    st.markdown(
-        '<p class="dashboard-subtitle">Interactive view of California structural engineer license data from the DCA public record.</p>',
-        unsafe_allow_html=True,
-    )
-
     st.sidebar.title("Data Source")
 
     default_csv = "ProfEngrsLandSurvyrsGeologist_Data00.xls_structural_engineers_cleaned"
     src = resolve_data_source(default_csv)
+
+    data_updated_str = None
+    if src:
+        try:
+            src_path = Path(src)
+            if src_path.exists():
+                data_updated_str = datetime.fromtimestamp(src_path.stat().st_mtime).strftime("%B %d, %Y")
+        except (OSError, ValueError):
+            pass
+
+    st.title("🏗️ Statistics for the California Structural Engineer License")
+    subtitle_html = '<p class="dashboard-subtitle">Interactive view of California structural engineer license data from the DCA public record.</p>'
+    if data_updated_str:
+        subtitle_html += f'<p class="dashboard-subtitle">Data last updated: {data_updated_str}</p>'
+    st.markdown(subtitle_html, unsafe_allow_html=True)
 
     df = None
     if src:
