@@ -12,6 +12,7 @@ Usage:
 """
 from pathlib import Path
 from datetime import datetime
+import subprocess
 import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
@@ -114,6 +115,40 @@ def parse_dates(df):
         pass
 
     return df
+
+
+def get_data_last_updated(src) -> Optional[str]:
+    """Return a human-readable date for when the CSV was last refreshed.
+
+    Prefers the file's last git commit date because Streamlit Cloud re-clones
+    the repo on every deploy, which resets filesystem mtimes to the deploy
+    time. Falls back to mtime when git isn't available (e.g., the source is
+    a URL, the file isn't tracked, or git isn't on PATH).
+    """
+    if not src:
+        return None
+    try:
+        src_path = Path(src)
+        if not src_path.exists():
+            return None
+
+        try:
+            result = subprocess.run(
+                ["git", "log", "-1", "--format=%aI", "--", src_path.name],
+                cwd=str(src_path.parent),
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            iso = result.stdout.strip()
+            if result.returncode == 0 and iso:
+                return datetime.fromisoformat(iso).strftime("%B %d, %Y")
+        except (OSError, ValueError, subprocess.SubprocessError):
+            pass
+
+        return datetime.fromtimestamp(src_path.stat().st_mtime).strftime("%B %d, %Y")
+    except (OSError, ValueError):
+        return None
 
 
 def resolve_data_source(default_local_filename: str):
@@ -1181,14 +1216,7 @@ def main():
     default_csv = "ProfEngrsLandSurvyrsGeologist_Data00.xls_structural_engineers_cleaned"
     src = resolve_data_source(default_csv)
 
-    data_updated_str = None
-    if src:
-        try:
-            src_path = Path(src)
-            if src_path.exists():
-                data_updated_str = datetime.fromtimestamp(src_path.stat().st_mtime).strftime("%B %d, %Y")
-        except (OSError, ValueError):
-            pass
+    data_updated_str = get_data_last_updated(src)
 
     st.title("🏗️ Statistics for the California Structural Engineer License")
     subtitle_html = '<p class="dashboard-subtitle">Interactive view of California structural engineer license data from the DCA public record.</p>'
