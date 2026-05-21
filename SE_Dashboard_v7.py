@@ -72,6 +72,9 @@ EVENT_MARKER_COLOR = DANGER
 # on bars to reduce visual noise.
 BAR_LABEL_MAX_CATEGORIES = 25
 
+# Non-state US jurisdictions shown in the "US Territories" bubble on the US map
+_US_TERRITORIES = {'PR', 'GU', 'VI', 'AS', 'MP', 'AP', 'AA', 'AE'}
+
 
 # ---------- Data loading ----------
 def _file_hash(src):
@@ -208,19 +211,23 @@ def _init_filters_from_url(df):
     if not params:
         return
 
-    if 'states' in params and 'state_filter' not in st.session_state:
-        url_states = [s.strip() for s in params['states'].split(',') if s.strip()]
-        valid = set(df['State'].dropna().unique()) if 'State' in df.columns else set()
-        filtered = [s for s in url_states if s in valid]
-        if filtered:
-            st.session_state['state_filter'] = filtered
+    if 'states' in params:
+        all_states = sorted(df['State'].dropna().unique().tolist()) if 'State' in df.columns else []
+        if all_states and not any(f"state_filter__{s}" in st.session_state for s in all_states):
+            url_states = [s.strip() for s in params['states'].split(',') if s.strip()]
+            valid = set(all_states)
+            selected = {s for s in url_states if s in valid}
+            for s in all_states:
+                st.session_state[f"state_filter__{s}"] = s in selected
 
-    if 'statuses' in params and 'status_filter' not in st.session_state:
-        url_statuses = [s.strip() for s in params['statuses'].split(',') if s.strip()]
-        valid = set(df['License Status'].dropna().unique()) if 'License Status' in df.columns else set()
-        filtered = [s for s in url_statuses if s in valid]
-        if filtered:
-            st.session_state['status_filter'] = filtered
+    if 'statuses' in params:
+        all_statuses = sorted(df['License Status'].dropna().unique().tolist()) if 'License Status' in df.columns else []
+        if all_statuses and not any(f"status_filter__{s}" in st.session_state for s in all_statuses):
+            url_statuses = [s.strip() for s in params['statuses'].split(',') if s.strip()]
+            valid = set(all_statuses)
+            selected = {s for s in url_statuses if s in valid}
+            for s in all_statuses:
+                st.session_state[f"status_filter__{s}"] = s in selected
 
     if 'start_year' in params and 'date_range_slider' not in st.session_state:
         try:
@@ -252,12 +259,15 @@ def _build_share_params(filters: dict) -> dict:
 
 # ---------- Filter chip summary ----------
 
-def _render_filter_chips(filters: dict, df: pd.DataFrame):
+def _render_filter_chips(filters: dict, df: pd.DataFrame, container=None):
     """Render a compact chip bar showing the currently-applied filters.
 
     Only shows chips that differ from the unfiltered default — keeps the bar
-    quiet when nothing is filtered.
+    quiet when nothing is filtered. Pass ``container=st.sidebar`` to render
+    inside the sidebar instead of the main area.
     """
+    if container is None:
+        container = st
     all_states = sorted(df['State'].dropna().unique().tolist()) if 'State' in df.columns else []
     all_statuses = sorted(df['License Status'].dropna().unique().tolist()) if 'License Status' in df.columns else []
 
@@ -297,49 +307,53 @@ def _render_filter_chips(filters: dict, df: pd.DataFrame):
         )
         html = f'<div class="filter-chips">{items}</div>'
 
-    st.markdown(html, unsafe_allow_html=True)
+    container.markdown(html, unsafe_allow_html=True)
 
 
 # ---------- Filters & visuals (updated with Plotly) ----------
+
+def _render_checkbox_filter(label: str, options: list, ss_prefix: str) -> list:
+    """Excel-style checkbox filter inside a collapsible expander."""
+    select_all_key = f"{ss_prefix}__all"
+
+    for opt in options:
+        opt_key = f"{ss_prefix}__{opt}"
+        if opt_key not in st.session_state:
+            st.session_state[opt_key] = True
+
+    all_selected = all(st.session_state.get(f"{ss_prefix}__{opt}", True) for opt in options)
+    n_selected = sum(1 for opt in options if st.session_state.get(f"{ss_prefix}__{opt}", True))
+    st.session_state[select_all_key] = all_selected
+
+    if all_selected:
+        expander_label = f"{label}: All"
+    elif n_selected == 0:
+        expander_label = f"{label}: None"
+    else:
+        expander_label = f"{label}: {n_selected} of {len(options)}"
+
+    def on_select_all():
+        new_val = st.session_state[select_all_key]
+        for opt in options:
+            st.session_state[f"{ss_prefix}__{opt}"] = new_val
+
+    with st.sidebar.expander(expander_label, expanded=False):
+        st.checkbox("(Select All)", key=select_all_key, on_change=on_select_all)
+        selected = []
+        for opt in options:
+            opt_key = f"{ss_prefix}__{opt}"
+            if st.checkbox(opt, key=opt_key):
+                selected.append(opt)
+
+    return selected
+
+
 def create_filters(df):
     filters = {}
 
-    st.sidebar.header("Filters")
+    st.sidebar.title("Filters")
+
     events_df_present = load_timeline_events() is not None
-    filters['show_events'] = st.sidebar.checkbox(
-        "Show timeline events",
-        value=events_df_present,
-        help="Toggle overlays of exam/code history on charts (if available).",
-        key='show_events_toggle',
-    )
-
-    st.sidebar.subheader("State")
-    states = sorted(df['State'].dropna().unique().tolist()) if 'State' in df.columns else []
-    filters['states'] = st.sidebar.multiselect(
-        "Select States:",
-        options=states,
-        default=states,
-        key='state_filter',
-        help="Select one or more states. Leave empty to include all states.",
-    )
-
-    filters['comparison_state'] = st.sidebar.selectbox(
-        "Compare with State (overlay on bar chart):",
-        options=['None'] + states,
-        index=0,
-        key='comparison_state',
-        help="Select a single state to overlay its data on the time series bar chart",
-    )
-
-    st.sidebar.subheader("License Status")
-    statuses = sorted(df['License Status'].dropna().unique().tolist()) if 'License Status' in df.columns else []
-    filters['statuses'] = st.sidebar.multiselect(
-        "Select License Statuses:",
-        options=statuses,
-        default=statuses,
-        key='status_filter',
-        help="Select one or more license statuses. Leave empty to include all statuses.",
-    )
 
     st.sidebar.subheader("Date Range")
     if 'Original Issue Date' in df.columns and pd.api.types.is_datetime64_any_dtype(df['Original Issue Date']):
@@ -355,6 +369,31 @@ def create_filters(df):
         value=(min_year, max_year),
         key='date_range_slider',
     )
+
+    filters['show_events'] = st.sidebar.checkbox(
+        "Show timeline events",
+        value=events_df_present,
+        help="Toggle overlays of exam/code history on charts (if available).",
+        key='show_events_toggle',
+    )
+
+    st.sidebar.markdown("---")
+
+    states = sorted(df['State'].dropna().unique().tolist()) if 'State' in df.columns else []
+    st.sidebar.markdown('<p class="sidebar-filter-title">License Holder\'s State of Residence</p>', unsafe_allow_html=True)
+    filters['states'] = _render_checkbox_filter("State", states, 'state_filter')
+
+    filters['comparison_state'] = st.sidebar.selectbox(
+        "Compare with State (overlay on bar chart):",
+        options=['None'] + states,
+        index=0,
+        key='comparison_state',
+        help="Select a single state to overlay its data on the time series bar chart",
+    )
+
+    statuses = sorted(df['License Status'].dropna().unique().tolist()) if 'License Status' in df.columns else []
+    st.sidebar.markdown('<p class="sidebar-filter-title">Status of License</p>', unsafe_allow_html=True)
+    filters['statuses'] = _render_checkbox_filter("License Status", statuses, 'status_filter')
 
     if not events_df_present:
         st.sidebar.caption("Add `timeline_events.csv` with columns: start_date, end_date (optional), label, description, type.")
@@ -383,6 +422,44 @@ def apply_filters(df, filters):
     return filtered_df
 
 
+_BUCKET_SINGULAR = {
+    "Yearly": "Year",
+    "Half-Yearly": "Half-Year",
+    "Quarterly": "Quarter",
+    "Monthly": "Month",
+}
+
+
+def _render_count_bubble(count: int, total: int, label: str):
+    """Render a circle card summarising a sub-count of license holders."""
+    pct = (count / total * 100) if total > 0 else 0.0
+    st.markdown(
+        f"""
+        <div style="display:flex;flex-direction:column;align-items:center;
+                    justify-content:center;height:100%;min-height:260px;gap:10px;">
+            <div style="
+                width:140px;height:140px;border-radius:50%;
+                background:rgba(31,78,121,0.10);
+                border:2.5px solid #1F4E79;
+                display:flex;flex-direction:column;
+                align-items:center;justify-content:center;text-align:center;
+                padding:12px;
+            ">
+                <span style="font-size:1.55rem;font-weight:700;color:#1F4E79;
+                             line-height:1.1;">{count:,}</span>
+                <span style="font-size:0.68rem;color:#64748B;margin-top:3px;">licenses</span>
+            </div>
+            <div style="font-size:0.82rem;font-weight:600;color:#475569;
+                        text-align:center;line-height:1.45;">
+                {label}<br>
+                <span style="font-weight:400;color:#94A3B8;">({pct:.1f}% of total)</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def create_visualizations(filtered_df, show_events: bool, start_year: Optional[int] = None, end_year: Optional[int] = None, comparison_state: str = None, full_df=None, status_agnostic_df=None):
     if filtered_df is None or filtered_df.empty:
         st.warning("No data to visualize with current filters.")
@@ -397,17 +474,20 @@ def create_visualizations(filtered_df, show_events: bool, start_year: Optional[i
     has_geo = has_multi_state or has_ca_county
     has_status = 'License Status' in filtered_df.columns and filtered_df['License Status'].nunique() > 1
 
-    tab_labels = ["Activity"]
+    tab_labels = ["Time"]
     if has_geo:
         tab_labels.append("Geography")
     if has_status:
         tab_labels.append("Status")
 
+    st.markdown(
+        '<h3 style="text-decoration:underline;margin-bottom:0.25rem;">Category of Visuals</h3>',
+        unsafe_allow_html=True,
+    )
     tabs = st.tabs(tab_labels)
 
-    # ---------- Activity tab ----------
+    # ---------- Time tab ----------
     with tabs[0]:
-        st.subheader("Licenses Issued Over Time")
         col1, _ = st.columns([1, 3])
         with col1:
             bucket_size = st.selectbox("Time Grouping:", ["Yearly", "Half-Yearly", "Quarterly", "Monthly"])
@@ -417,24 +497,50 @@ def create_visualizations(filtered_df, show_events: bool, start_year: Optional[i
                 help="When checked, zooming/panning will only affect the X axis; Y axis will remain fixed.",
             )
 
+        st.subheader(f"Licenses Issued by {_BUCKET_SINGULAR.get(bucket_size, bucket_size)}")
         events_df = load_timeline_events()
         plot_time_series(filtered_df, bucket_size, lock_y, events_df=events_df, show_events=show_events, start_year=start_year, end_year=end_year, comparison_state=comparison_state, full_df=full_df)
-        plot_time_series_line(filtered_df, lock_y, events_df=events_df, show_events=show_events, start_year=start_year, end_year=end_year)
         plot_yearly_retirements(filtered_df, start_year=start_year, end_year=end_year)
         active_df = status_agnostic_df if status_agnostic_df is not None else filtered_df
         plot_active_licenses_per_year(active_df, start_year=start_year, end_year=end_year)
         plot_avg_license_age_per_year(active_df, start_year=start_year, end_year=end_year)
+        st.subheader("Licenses Issued Over Time")
+        plot_time_series_line(filtered_df, lock_y, events_df=events_df, show_events=show_events, start_year=start_year, end_year=end_year)
 
     # ---------- Geography tab ----------
     if has_geo:
         with tabs[tab_labels.index("Geography")]:
-            if has_multi_state:
-                plot_state_counts(filtered_df)
-                plot_us_map(filtered_df)
             if has_ca_county:
                 ca_data = filtered_df[filtered_df['State'] == 'CA']
-                st.subheader("California Licenses by County")
-                plot_ca_county_map(ca_data)
+                out_of_state_count = (
+                    int((filtered_df['State'] != 'CA').sum())
+                    if 'State' in filtered_df.columns else 0
+                )
+                st.subheader("Licenses by California County")
+                if out_of_state_count > 0:
+                    col_map, col_bubble = st.columns([4, 1])
+                    with col_map:
+                        plot_ca_county_map(ca_data)
+                    with col_bubble:
+                        _render_count_bubble(out_of_state_count, len(filtered_df), "Out of State")
+                else:
+                    plot_ca_county_map(ca_data)
+            if has_multi_state:
+                territory_count = (
+                    int(
+                        filtered_df['State'].apply(
+                            lambda s: pd.notna(s) and str(s).strip().upper() in _US_TERRITORIES
+                        ).sum()
+                    )
+                    if 'State' in filtered_df.columns else 0
+                )
+                st.subheader("Licenses by State")
+                col_map, col_bubble = st.columns([4, 1])
+                with col_map:
+                    plot_us_map(filtered_df)
+                with col_bubble:
+                    _render_count_bubble(territory_count, len(filtered_df), "US Territories")
+                plot_state_counts(filtered_df)
 
     # ---------- Status tab ----------
     if has_status:
@@ -1176,6 +1282,75 @@ def plot_avg_license_age_per_year(filtered_df, start_year=None, end_year=None):
                 st.metric("Most Recent Year", f"{valid[-1][0]} ({valid[-1][1]:.1f} yrs)")
 
 
+def _get_current_filters_from_session(df) -> dict:
+    """Read the current filter state from session state without rendering any widgets.
+
+    Called before create_filters() so sidebar metrics can be computed on the
+    same run that the user changed a filter, rather than one run behind.
+    Defaults to all-included when a key is absent (first load).
+    """
+    states = sorted(df['State'].dropna().unique().tolist()) if 'State' in df.columns else []
+    statuses = sorted(df['License Status'].dropna().unique().tolist()) if 'License Status' in df.columns else []
+
+    selected_states = [s for s in states if st.session_state.get(f"state_filter__{s}", True)]
+    selected_statuses = [s for s in statuses if st.session_state.get(f"status_filter__{s}", True)]
+
+    date_range = st.session_state.get('date_range_slider')
+    if date_range:
+        start_year, end_year = int(date_range[0]), int(date_range[1])
+    elif 'Original Issue Date' in df.columns and pd.api.types.is_datetime64_any_dtype(df['Original Issue Date']):
+        start_year = int(df['Original Issue Date'].dt.year.min())
+        end_year = int(df['Original Issue Date'].dt.year.max())
+    else:
+        start_year, end_year = 1900, pd.Timestamp.now().year
+
+    return {
+        'states': selected_states or states,
+        'statuses': selected_statuses or statuses,
+        'start_year': start_year,
+        'end_year': end_year,
+        'comparison_state': st.session_state.get('comparison_state', 'None'),
+        'show_events': st.session_state.get('show_events_toggle', True),
+    }
+
+
+def _display_sidebar_metrics(filtered_df):
+    """Inline label: value rows for the sidebar Summary Data section."""
+    if filtered_df is None or filtered_df.empty:
+        st.sidebar.caption("No data loaded.")
+        return
+
+    records = f"{len(filtered_df):,}"
+    states = str(filtered_df['State'].nunique() if 'State' in filtered_df.columns else 0)
+
+    if 'License Status' in filtered_df.columns:
+        active = f"{int((filtered_df['License Status'].str.strip().str.lower() == 'active').sum()):,}"
+    else:
+        active = "N/A"
+
+    if 'Original Issue Date' in filtered_df.columns and pd.api.types.is_datetime64_any_dtype(filtered_df['Original Issue Date']):
+        yr_min = int(filtered_df['Original Issue Date'].dt.year.min())
+        yr_max = int(filtered_df['Original Issue Date'].dt.year.max())
+        years = f"{yr_min}–{yr_max}"
+    else:
+        years = "N/A"
+
+    rows = [("Records", records), ("States*", states), ("Active Licenses", active), ("Year Range", years)]
+    cells = "".join(
+        f'<tr>'
+        f'<td style="padding:3px 0;color:#64748B;font-size:0.88rem;">{lbl}</td>'
+        f'<td style="padding:3px 0;text-align:right;font-weight:600;color:#1E293B;font-size:0.88rem;">{val}</td>'
+        f'</tr>'
+        for lbl, val in rows
+    )
+    html = (
+        f'<table style="width:100%;border-collapse:collapse;">{cells}</table>'
+        f'<p style="font-size:0.65rem;color:#94A3B8;margin-top:5px;">'
+        f'*Includes U.S. territories, Armed Forces jurisdictions, and international license holders.</p>'
+    )
+    st.sidebar.markdown(html, unsafe_allow_html=True)
+
+
 def display_summary_metrics(filtered_df):
     col1, col2, col3, col4 = st.columns(4)
     with col1:
@@ -1205,13 +1380,11 @@ def main():
         page_title="CA SE License Statistics",
         page_icon="🏗️",
         layout="wide",
-        initial_sidebar_state="expanded",
+        initial_sidebar_state="auto",
     )
 
     # Apply unified visual theme
     st.markdown(DASHBOARD_CSS, unsafe_allow_html=True)
-
-    st.sidebar.title("Data Source")
 
     default_csv = "ProfEngrsLandSurvyrsGeologist_Data00.xls_structural_engineers_cleaned"
     src = resolve_data_source(default_csv)
@@ -1229,12 +1402,6 @@ def main():
         with st.spinner("Loading cleaned data..."):
             df = load_cleaned_data(src, _file_mtime=_file_hash(src))
             df = parse_dates(df)
-            if df is not None:
-                st.sidebar.success(f"Loaded: {Path(src).name}")
-                if 'Dashboard_Updated' in df.columns:
-                    latest = df['Dashboard_Updated'].dropna()
-                    if not latest.empty:
-                        st.sidebar.caption(f"Data processed: {latest.iloc[0]}")
 
     if df is None:
         st.sidebar.warning("No CSV file found automatically.")
@@ -1268,6 +1435,20 @@ def main():
 
     _init_filters_from_url(df)
 
+    # Read session state before widgets render so sidebar metrics are current
+    preview_filters = _get_current_filters_from_session(df)
+    preview_df = apply_filters(df, preview_filters)
+
+    # Sidebar: Summary Data
+    st.sidebar.title("Summary Data")
+    _display_sidebar_metrics(preview_df)
+
+    st.sidebar.markdown("---")
+
+    # Sidebar: active filter chips
+    _render_filter_chips(preview_filters, df, container=st.sidebar)
+
+    # Sidebar: Filters (title + widgets)
     filters = create_filters(df)
 
     st.sidebar.markdown("---")
@@ -1278,12 +1459,6 @@ def main():
     full_df = df.copy()
     filtered_df = apply_filters(df, filters)
     status_agnostic_df = apply_filters(df, {**filters, 'statuses': []})
-
-    # Filter summary chip bar
-    _render_filter_chips(filters, df)
-
-    # Metrics
-    display_summary_metrics(filtered_df)
 
     if filtered_df is None or filtered_df.empty:
         st.warning("No records match the selected filters. Try adjusting your filter criteria.")

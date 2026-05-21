@@ -216,7 +216,12 @@ section[data-testid="stSidebar"] {
     background-color: #F8FAFC;
     border-right: 1px solid #E2E8F0;
 }
-section[data-testid="stSidebar"] h1,
+section[data-testid="stSidebar"] h1 {
+    font-size: 1.75rem;
+    color: #1E293B;
+    margin-top: 0.25rem;
+    margin-bottom: 0.5rem;
+}
 section[data-testid="stSidebar"] h2,
 section[data-testid="stSidebar"] h3 {
     font-size: 1rem;
@@ -225,6 +230,23 @@ section[data-testid="stSidebar"] h3 {
 }
 section[data-testid="stSidebar"] [data-testid="stHeader"] {
     color: #1E293B;
+}
+
+
+/* Filter section labels — roughly 2× the default sidebar body text */
+.sidebar-filter-title {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: #1E293B;
+    margin: 0.6rem 0 0.15rem 0;
+    line-height: 1.3;
+}
+
+/* Expander headers in sidebar */
+section[data-testid="stSidebar"] .streamlit-expanderHeader,
+section[data-testid="stSidebar"] summary {
+    font-size: 1.05rem !important;
+    font-weight: 500 !important;
 }
 
 /* ---------- Tabs ---------- */
@@ -237,7 +259,14 @@ section[data-testid="stSidebar"] [data-testid="stHeader"] {
     border-radius: 8px 8px 0 0;
     color: #64748B;
     font-weight: 500;
-    font-size: 0.95rem;
+    font-size: 1.6rem !important;
+}
+/* Streamlit renders the visible label inside a child div — target it directly */
+.stTabs [data-baseweb="tab"] > div,
+.stTabs [data-baseweb="tab"] p,
+button[data-baseweb="tab"] > div,
+button[data-baseweb="tab"] p {
+    font-size: 1.6rem !important;
 }
 .stTabs [aria-selected="true"] {
     color: #1F4E79 !important;
@@ -269,6 +298,17 @@ section[data-testid="stSidebar"] [data-testid="stHeader"] {
 /* ---------- Subheaders inside tabs ---------- */
 .stTabs h2, .stTabs h3 {
     margin-top: 1rem;
+}
+
+/* ---------- Mobile ---------- */
+@media (max-width: 768px) {
+    .stTabs [data-baseweb="tab"],
+    .stTabs [data-baseweb="tab"] > div,
+    .stTabs [data-baseweb="tab"] p,
+    button[data-baseweb="tab"] > div,
+    button[data-baseweb="tab"] p {
+        font-size: 1rem !important;
+    }
 }
 </style>
 """
