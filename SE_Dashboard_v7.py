@@ -1148,7 +1148,9 @@ def plot_active_licenses_per_year(filtered_df, start_year=None, end_year=None):
     st.caption(
         "Counts licenses that were active during each year (issued on or before Dec 31, "
         "expiration on or after Jan 1). Ignores the License Status sidebar filter so the "
-        "historical view stays consistent."
+        "historical view stays consistent.  \n"
+        "Active licenses is not an accurate measure of active practitioners. A licenses holder "
+        "only has to pay the license renewal fee every 2 years to maintain an active license."
     )
 
     has_issue = 'Original Issue Date' in filtered_df.columns and pd.api.types.is_datetime64_any_dtype(filtered_df['Original Issue Date'])
@@ -1392,7 +1394,13 @@ def main():
     data_updated_str = get_data_last_updated(src)
 
     st.title("🏗️ Statistics for the California Structural Engineer License")
-    subtitle_html = '<p class="dashboard-subtitle">Interactive view of California structural engineer license data from the DCA public record.</p>'
+    subtitle_html = (
+        '<p class="dashboard-subtitle">'
+        'Interactive view of California structural engineer license data from the DCA public record.<br>'
+        'Select a tab below to toggle between different visual representation categories of the data.<br>'
+        'Scroll down on each page to see all visuals of the chosen category.'
+        '</p>'
+    )
     if data_updated_str:
         subtitle_html += f'<p class="dashboard-subtitle">Data last updated: {data_updated_str}</p>'
     st.markdown(subtitle_html, unsafe_allow_html=True)
