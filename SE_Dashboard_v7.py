@@ -1398,7 +1398,8 @@ def main():
         '<p class="dashboard-subtitle">'
         'Interactive view of California structural engineer license data from the DCA public record.<br>'
         'Select a tab below to toggle between different visual representation categories of the data.<br>'
-        'Scroll down on each page to see all visuals of the chosen category.'
+        'Scroll down on each page to see all visuals of the chosen category.<br>'
+        'See sidebar to the left to filter the data by time, state of residence, and license status.'
         '</p>'
     )
     if data_updated_str:
