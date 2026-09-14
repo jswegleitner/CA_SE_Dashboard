@@ -318,16 +318,19 @@ def _render_filter_chips(filters: dict, df: pd.DataFrame, container=None):
     if cmp_state and cmp_state != 'None':
         chips.append(("Compare", cmp_state))
 
+    # Must not be named `html` — that shadows the stdlib module for this whole
+    # function scope and makes the html.escape() call below raise
+    # UnboundLocalError whenever at least one chip is present.
     if not chips:
-        html = '<div class="filter-chips"><span class="filter-chip-empty">No filters applied — viewing all records</span></div>'
+        chips_html = '<div class="filter-chips"><span class="filter-chip-empty">No filters applied — viewing all records</span></div>'
     else:
         items = "".join(
             f'<span class="filter-chip"><span class="filter-chip-key">{key}</span>{html.escape(str(val))}</span>'
             for key, val in chips
         )
-        html = f'<div class="filter-chips">{items}</div>'
+        chips_html = f'<div class="filter-chips">{items}</div>'
 
-    container.markdown(html, unsafe_allow_html=True)
+    container.markdown(chips_html, unsafe_allow_html=True)
 
 
 # ---------- Filters & visuals (updated with Plotly) ----------
@@ -1449,12 +1452,14 @@ def _display_sidebar_metrics(filtered_df):
         f'</tr>'
         for lbl, val in rows
     )
-    html = (
+    # Not named `html`: that would shadow the stdlib module for this scope and
+    # break any html.escape() added here later (see _render_filter_chips).
+    table_html = (
         f'<table style="width:100%;border-collapse:collapse;">{cells}</table>'
         f'<p style="font-size:0.65rem;color:#94A3B8;margin-top:5px;">'
         f'*Includes U.S. territories, Armed Forces jurisdictions, and international license holders.</p>'
     )
-    st.sidebar.markdown(html, unsafe_allow_html=True)
+    st.sidebar.markdown(table_html, unsafe_allow_html=True)
 
 
 def _display_headline_stats(df):

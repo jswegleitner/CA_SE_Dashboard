@@ -21,6 +21,7 @@ from SE_Dashboard_v7 import (
     _build_full_index,
     _count_by_period,
     parse_dates,
+    _render_filter_chips,
 )
 
 
@@ -194,3 +195,52 @@ class TestParseDates:
         result = parse_dates(df)
         assert pd.isna(result['Original Issue Date'].iloc[0])
         assert pd.notna(result['Original Issue Date'].iloc[1])
+
+
+# ---------- _render_filter_chips ----------
+
+class _ChipCapture:
+    """Stands in for st.sidebar; records the markdown it is handed."""
+    def __init__(self):
+        self.out = None
+
+    def markdown(self, body, **kwargs):
+        self.out = body
+
+
+class TestRenderFilterChips:
+    """Regression cover for a NameError that only fired once a chip existed.
+
+    The function used a local named `html`, which shadowed the stdlib module
+    for the whole scope and made the html.escape() call raise
+    UnboundLocalError. The no-filter branch never calls escape(), so the
+    default page rendered fine and the break only showed up once a filter
+    was applied.
+    """
+
+    DF = pd.DataFrame({
+        'State': ['CA', 'NV'],
+        'License Status': ['Active', 'Retired'],
+    })
+    BASE = {
+        'states': [], 'statuses': [], 'start_year': None,
+        'end_year': None, 'comparison_state': None,
+    }
+
+    def _render(self, **overrides):
+        cap = _ChipCapture()
+        _render_filter_chips({**self.BASE, **overrides}, self.DF, container=cap)
+        return cap.out
+
+    def test_renders_with_a_filter_applied(self):
+        out = self._render(states=['CA'])
+        assert 'filter-chip' in out
+        assert 'CA' in out
+
+    def test_renders_with_no_filters(self):
+        assert 'No filters applied' in self._render()
+
+    def test_escapes_chip_values(self):
+        out = self._render(comparison_state='<script>alert(1)</script>')
+        assert '&lt;script&gt;' in out
+        assert '<script>' not in out
