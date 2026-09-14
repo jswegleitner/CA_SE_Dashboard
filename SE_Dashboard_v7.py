@@ -16,7 +16,7 @@ import subprocess
 import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
-import re
+import html
 from typing import Optional
 
 from dashboard_lib.timeline import (
@@ -108,11 +108,20 @@ def parse_dates(df):
     if df is None:
         return df
 
+    def _parse(series):
+        # The pipeline publishes ISO dates; parsing with an explicit format avoids
+        # the slow per-element dateutil fallback. Re-parse without it only if the
+        # column turns out not to be ISO (e.g., a hand-made uploaded CSV).
+        parsed = pd.to_datetime(series, format='%Y-%m-%d', errors='coerce')
+        if parsed.isna().all() and series.notna().any():
+            parsed = pd.to_datetime(series, errors='coerce')
+        return parsed
+
     try:
         if 'Original Issue Date' in df.columns:
-            df['Original Issue Date'] = pd.to_datetime(df['Original Issue Date'], errors='coerce')
+            df['Original Issue Date'] = _parse(df['Original Issue Date'])
         if 'Expiration Date' in df.columns:
-            df['Expiration Date'] = pd.to_datetime(df['Expiration Date'], errors='coerce')
+            df['Expiration Date'] = _parse(df['Expiration Date'])
     except Exception:
         # Don't raise; invalid date parsing should not break the app.
         pass
@@ -233,12 +242,23 @@ def _init_filters_from_url(df):
         try:
             sy = int(params['start_year'])
             ey = int(params.get('end_year', str(sy)))
-            st.session_state['date_range_slider'] = (sy, ey)
+            # Clamp to the data's year range — an out-of-bounds session-state value
+            # makes st.slider raise (StreamlitValueBelowMinError) and break the page.
+            if 'Original Issue Date' in df.columns and pd.api.types.is_datetime64_any_dtype(df['Original Issue Date']):
+                min_year = int(df['Original Issue Date'].dt.year.min())
+                max_year = int(df['Original Issue Date'].dt.year.max())
+                sy = min(max(sy, min_year), max_year)
+                ey = min(max(ey, min_year), max_year)
+                if sy > ey:
+                    sy, ey = ey, sy
+                st.session_state['date_range_slider'] = (sy, ey)
         except (ValueError, TypeError):
             pass
 
     if 'compare' in params and 'comparison_state' not in st.session_state:
-        st.session_state['comparison_state'] = params['compare']
+        valid_states = set(df['State'].dropna().unique().tolist()) if 'State' in df.columns else set()
+        if params['compare'] in valid_states:
+            st.session_state['comparison_state'] = params['compare']
 
 
 def _build_share_params(filters: dict) -> dict:
@@ -302,7 +322,7 @@ def _render_filter_chips(filters: dict, df: pd.DataFrame, container=None):
         html = '<div class="filter-chips"><span class="filter-chip-empty">No filters applied — viewing all records</span></div>'
     else:
         items = "".join(
-            f'<span class="filter-chip"><span class="filter-chip-key">{key}</span>{val}</span>'
+            f'<span class="filter-chip"><span class="filter-chip-key">{key}</span>{html.escape(str(val))}</span>'
             for key, val in chips
         )
         html = f'<div class="filter-chips">{items}</div>'
@@ -502,6 +522,7 @@ def create_visualizations(filtered_df, show_events: bool, start_year: Optional[i
         plot_time_series(filtered_df, bucket_size, lock_y, events_df=events_df, show_events=show_events, start_year=start_year, end_year=end_year, comparison_state=comparison_state, full_df=full_df)
         plot_yearly_retirements(filtered_df, start_year=start_year, end_year=end_year)
         active_df = status_agnostic_df if status_agnostic_df is not None else filtered_df
+        plot_net_change_per_year(active_df, start_year=start_year, end_year=end_year)
         plot_active_licenses_per_year(active_df, start_year=start_year, end_year=end_year)
         plot_avg_license_age_per_year(active_df, start_year=start_year, end_year=end_year)
         st.subheader("Licenses Issued Over Time")
@@ -936,7 +957,7 @@ def plot_status_pie(filtered_df):
                 f"<div style='display:flex;align-items:center;gap:10px;margin:6px 0;'>"
                 f"<span style='display:inline-block;width:12px;height:12px;border-radius:3px;"
                 f"background:{color};flex-shrink:0;'></span>"
-                f"<span><b>{status}</b>: {count:,} ({percentage:.1f}%)</span>"
+                f"<span><b>{html.escape(str(status))}</b>: {count:,} ({percentage:.1f}%)</span>"
                 f"</div>",
                 unsafe_allow_html=True,
             )
@@ -1138,6 +1159,89 @@ def plot_yearly_retirements(filtered_df, start_year=None, end_year=None):
             st.metric("Peak Expirations", int(yearly['Expired'].max()))
         with c3:
             st.metric("Avg per Year", f"{yearly['Expired'].mean():.1f}")
+
+
+# ---------- Net change per year ----------
+
+def plot_net_change_per_year(filtered_df, start_year=None, end_year=None):
+    """Diverging bar chart: licenses issued minus licenses leaving the rolls, per year."""
+    st.subheader("Net Change in Licenses by Year")
+    st.caption(
+        "Licenses issued minus licenses leaving the rolls (status no longer Active, counted "
+        "by the year their Expiration Date falls in) — the growth story in one view. "
+        "Emerald bars are net growth; red bars are net decline. Ignores the License Status "
+        "sidebar filter so both sides of the ledger stay comparable. The current year is "
+        "excluded while its renewal cycle is in progress."
+    )
+
+    has_issue = 'Original Issue Date' in filtered_df.columns and pd.api.types.is_datetime64_any_dtype(filtered_df['Original Issue Date'])
+    has_exp = 'Expiration Date' in filtered_df.columns and pd.api.types.is_datetime64_any_dtype(filtered_df['Expiration Date'])
+    if not has_issue or not has_exp or 'License Status' not in filtered_df.columns:
+        st.info("Original Issue Date, Expiration Date, and License Status are needed for this chart.")
+        return
+
+    last_complete_year = pd.Timestamp.now().year - 1
+    lo = int(start_year) if start_year is not None else int(filtered_df['Original Issue Date'].dt.year.min())
+    hi = min(int(end_year), last_complete_year) if end_year is not None else last_complete_year
+    if lo > hi:
+        st.info("No complete years in the selected range.")
+        return
+
+    years = pd.Index(range(lo, hi + 1))
+    issued = (
+        filtered_df.dropna(subset=['Original Issue Date'])['Original Issue Date']
+        .dt.year.value_counts().reindex(years, fill_value=0)
+    )
+    non_active = filtered_df['License Status'].fillna('').str.strip().str.lower() != 'active'
+    leavers = filtered_df[non_active].dropna(subset=['Expiration Date'])
+    left = leavers['Expiration Date'].dt.year.value_counts().reindex(years, fill_value=0)
+    net = issued - left
+
+    show_labels = len(years) <= BAR_LABEL_MAX_CATEGORIES
+
+    fig = go.Figure()
+    for name, color, mask in [
+        ('Net gain', SUCCESS, net >= 0),
+        ('Net loss', DANGER, net < 0),
+    ]:
+        subset = net[mask]
+        if subset.empty:
+            continue
+        fig.add_trace(go.Bar(
+            x=subset.index,
+            y=subset.values,
+            name=name,
+            marker_color=color,
+            text=[f"{int(v):+d}" for v in subset.values] if show_labels else None,
+            textposition='outside' if show_labels else 'none',
+            customdata=pd.concat([issued[mask], left[mask]], axis=1).values,
+            hovertemplate=(
+                '<b>%{x}</b><br>Net: %{y:+,}<br>'
+                'Issued: %{customdata[0]:,}<br>'
+                'Left the rolls: %{customdata[1]:,}<extra></extra>'
+            ),
+        ))
+
+    fig.update_layout(
+        xaxis_title="Year",
+        yaxis_title="Net Licenses (Issued − Departed)",
+        height=460,
+        hovermode='x unified',
+        barmode='relative',
+        bargap=0.18,
+    )
+    fig.update_yaxes(zeroline=True, zerolinecolor=BORDER, zerolinewidth=1.5)
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    with st.expander("Net Change Statistics"):
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.metric("Best Year", f"{int(net.idxmax())} ({int(net.max()):+,})")
+        with c2:
+            st.metric("Worst Year", f"{int(net.idxmin())} ({int(net.min()):+,})")
+        with c3:
+            st.metric("Cumulative Net", f"{int(net.sum()):+,}")
 
 
 # ---------- Active licenses per year ----------
@@ -1353,27 +1457,40 @@ def _display_sidebar_metrics(filtered_df):
     st.sidebar.markdown(html, unsafe_allow_html=True)
 
 
-def display_summary_metrics(filtered_df):
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("Total Records", f"{len(filtered_df):,}" if filtered_df is not None else "0")
-    with col2:
-        st.metric("States*", filtered_df['State'].nunique() if (filtered_df is not None and 'State' in filtered_df.columns) else 0)
-    with col3:
-        if filtered_df is not None and 'Expiration Date' in filtered_df.columns:
-            current_date = pd.Timestamp.now()
-            active_licenses = len(filtered_df[filtered_df['Expiration Date'] >= current_date])
-            st.metric("Active Licenses", f"{active_licenses:,}")
-        else:
-            st.metric("Active Licenses", "0")
-    with col4:
-        if filtered_df is not None and 'Original Issue Date' in filtered_df.columns and pd.api.types.is_datetime64_any_dtype(filtered_df['Original Issue Date']):
-            date_range = f"{filtered_df['Original Issue Date'].dt.year.min()}–{filtered_df['Original Issue Date'].dt.year.max()}"
-            st.metric("Year Range", date_range)
-        else:
-            st.metric("Year Range", "N/A")
+def _display_headline_stats(df):
+    """Three headline metrics under the title — the story before the first scroll.
 
-    st.caption("*Includes U.S. territories (DC, GU, PR), Armed Forces jurisdictions (AP), and international license holders. Total count may exceed 50 states.")
+    Always computed from the full, unfiltered dataset so the numbers match the
+    public record regardless of sidebar filters.
+    """
+    has_status = 'License Status' in df.columns
+    has_issue = 'Original Issue Date' in df.columns and pd.api.types.is_datetime64_any_dtype(df['Original Issue Date'])
+    has_exp = 'Expiration Date' in df.columns and pd.api.types.is_datetime64_any_dtype(df['Expiration Date'])
+
+    n_active = int((df['License Status'].str.strip().str.lower() == 'active').sum()) if has_status else None
+    first_year = int(df['Original Issue Date'].dt.year.min()) if has_issue else None
+
+    last_complete_year = pd.Timestamp.now().year - 1
+    net_last_year = None
+    if has_status and has_issue and has_exp:
+        issued_ly = int((df['Original Issue Date'].dt.year == last_complete_year).sum())
+        non_active = df['License Status'].fillna('').str.strip().str.lower() != 'active'
+        left_ly = int(((df['Expiration Date'].dt.year == last_complete_year) & non_active).sum())
+        net_last_year = issued_ly - left_ly
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.metric("Active SE Licenses", f"{n_active:,}" if n_active is not None else "N/A")
+    with c2:
+        label = f"Licenses Issued Since {first_year}" if first_year else "Total Licenses Issued"
+        st.metric(label, f"{len(df):,}")
+    with c3:
+        st.metric(
+            f"Net Change in {last_complete_year}",
+            f"{net_last_year:+,}" if net_last_year is not None else "N/A",
+            help="Licenses issued minus licenses leaving the rolls in the last complete year. "
+                 "See the Net Change chart on the Time tab.",
+        )
 
 
 # ---------- App ----------
@@ -1433,6 +1550,30 @@ def main():
 3. Make sure your CSV has the required columns listed above
         """)
         return
+
+    _display_headline_stats(df)
+
+    with st.expander("About the data"):
+        st.markdown(
+            """
+- **Source.** California Department of Consumer Affairs (DCA) public licensee roster for the
+  Board for Professional Engineers, Land Surveyors, and Geologists (BPELSG), filtered to
+  Structural Engineer licenses. Individual statuses can be verified on the
+  [BPELSG license lookup](https://www.bpelsg.ca.gov/consumers/lic_lookup.shtml).
+- **Refresh cadence.** The public feed is downloaded and reconciled roughly monthly; the
+  "data last updated" date above reflects the latest refresh.
+- **How drop-offs are handled.** Licenses that disappear from the public feed are marked
+  *Cancelled* provisionally, then re-checked against the DCA license-detail pages to recover
+  their true status (Retired, Deceased, Delinquent, etc.).
+- **Known quirks.** For some reinstated or reciprocity licenses, DCA appears to stamp the
+  *reactivation* date into the Original Issue Date field; the last chart on the Time tab
+  flags these automatically.
+- **Caveats.** An *active license* is not the same as an active practitioner — renewal only
+  requires a fee every two years. Only each license's most recent expiration date is
+  published, so brief mid-career lapses aren't visible. Recent attrition counts can shrink
+  over time as delinquent licenses renew.
+"""
+        )
 
     # Dev-only column inspector — enable with ?debug=1 in the URL
     if st.query_params.get('debug') == '1':

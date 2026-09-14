@@ -1,7 +1,11 @@
 start_date,end_date,label,type,Code,Format,Notes
-1931-01-01,,California establishes Structural Engineer (SE) title act.,SE Exam,nan,Essay/oral examination,California becomes the first state to create a distinct SE license under the Civil Engineers Act.
-1957-01-01,,California Professional Engineers Act separates CE and SE practice scopes.,SE Exam,nan,Essay-based problems,Structural Engineers are required for complex structures; aligns with state seismic design focus.
+1931-01-01,,California establishes Structural Engineer (SE) title act.,SE Exam,,Essay/oral examination,California becomes the first state to create a distinct SE license under the Civil Engineers Act.
+1933-03-10,,M6.4 Long Beach earthquake,Earthquake,,,School buildings collapsed across the region. Led to the Field Act requiring engineered and state-supervised public school construction and the Riley Act mandating local building departments and lateral-force design.
+1957-01-01,,California Professional Engineers Act separates CE and SE practice scopes.,SE Exam,,Essay-based problems,Structural Engineers are required for complex structures; aligns with state seismic design focus.
+1971-02-09,,M6.6 San Fernando (Sylmar) earthquake,Earthquake,,,Hospital and freeway failures led to the Hospital Seismic Safety Act (1972) and the Alquist-Priolo fault-zoning act. A major driver of modern California seismic code development.
 1988-01-01,,California adds Seismic Principles Exam to Civil licensure.,SE Exam,"UBC (edition varies by year), AISC ASD, ACI 318",Multiple choice + essay,Ensures all CEs demonstrate basic earthquake engineering knowledge before SE specialization. Specific code editions not well-documented.
+1989-10-17,,M6.9 Loma Prieta earthquake,Earthquake,,,Cypress Street Viaduct and Bay Bridge failures accelerated Caltrans' statewide bridge seismic retrofit program and Bay Area building retrofit activity.
+1994-01-17,,M6.7 Northridge earthquake,Earthquake,,,Widespread brittle fractures in welded steel moment-frame connections led to the SAC Steel Project and FEMA 350 design guidance and a large retrofit workload for structural engineers.
 1997-01-01,,NCEES introduces Structural I and Structural II exams.,SE Exam,"UBC 1994/1997, AISC ASD 9th Ed, ACI 318, NDS (wood)","SE I: Multiple choice
 SE II: Essay problems","Two-tier national exam system; Structural II recognized by California for SE comity applicants. SE I was 4 hours, SE II was 8 hours. Design primarily used Allowable Stress Design (ASD) methods."
 2000-01-01,,Exam content updated.,SE Exam,"1997 UBC, SEAOC Blue Book (1996), ASCE 7-95","SE I: Multiple choice

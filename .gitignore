@@ -32,6 +32,9 @@ Other States Data/
 .venv/
 venv/
 
+# Streamlit local secrets — never commit (config.toml stays tracked)
+.streamlit/secrets.toml
+
 # IDE
 .vscode/
 .idea/
