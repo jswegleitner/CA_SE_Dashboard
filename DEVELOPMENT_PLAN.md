@@ -114,12 +114,8 @@ These can silently corrupt or stale-out the master record.
     `plot_time_series`, so with "Active only" selected the overlay still includes all statuses.
     *Fix:* apply the status filter to the comparison frame, or state the difference in the
     selectbox help text.
-13. **Status colors are positional, not stable** — the donut + breakdown assign
-    `CATEGORICAL_SEQUENCE` by index, so a status changes color when filters change which statuses
-    appear. *Fix:* a fixed status→color map in `theme.py` (color follows the entity, never its rank).
-14. **Retirements chart caption** — note that `Delinquent` is a reinstatable lapse and that
-    reconciliation-placeholder `Cancelled` rows are provisional, so recent years may shrink over
-    time as rescans/renewals land.
+13. ~~**Status colors are positional, not stable**~~ — **Done 2026-10-20** (`STATUS_COLORS` / `status_color()` in `theme.py`).
+14. ~~**Retirements chart caption**~~ — **Done 2026-10-20**: the retirements chart was merged into "Issued vs. Leaving the Rolls", which shades the last two complete years of departures and captions them as provisional.
 
 ## P4 — Performance & polish
 
@@ -142,9 +138,7 @@ These can silently corrupt or stale-out the master record.
 20. **Cohort retention chart** — % of each issuance decade's licenses still active (or median
     license lifespan from issue → terminal status). Pairs with the average-age chart to complete
     the "aging profession" story. Route through `status_agnostic_df`.
-21. **Per-capita views** — licenses per 100k residents for the county map (raw counts mostly map
-    population) and optionally per-capita active licenses over time (needs a small CA population
-    reference CSV).
+21. **Per-capita views** — *county map done 2026-10-20* (per-100k toggle, `data/ca_county_population.csv`, Census Vintage 2024); per-capita active-over-time still open.
 22. **Survival curve** — Kaplan-Meier-style "probability a license is still active after N years";
     the data (issue date, expiration date, terminal status) supports it directly.
 23. More timeline candidates: 1925 Santa Barbara (pre-1931, would need chart range change),

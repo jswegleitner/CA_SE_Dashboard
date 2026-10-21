@@ -40,6 +40,18 @@ from dashboard_lib.geo import (
     to_state_code,
     to_county_fips,
 )
+from dashboard_lib.stats import (
+    PROVISIONAL_DEPARTURE_YEARS,
+    SENIOR_TENURE_YEARS,
+    TENURE_BIN_EDGES,
+    issued_per_year,
+    departed_per_year,
+    recent_vs_baseline,
+    trend_streak,
+    active_on,
+    years_licensed,
+    tenure_histogram,
+)
 from dashboard_lib.theme import (
     register_plotly_template,
     DASHBOARD_CSS,
@@ -53,6 +65,8 @@ from dashboard_lib.theme import (
     BLUE_SCALE,
     RED_SCALE,
     CATEGORICAL_SEQUENCE,
+    MUTED,
+    status_color,
 )
 
 # Activate the unified Plotly template once at module load
@@ -67,6 +81,7 @@ EXPIRATION_BAR_COLOR = DANGER
 ACTIVE_LINE_COLOR = SUCCESS
 STATE_BAR_COLOR = PRIMARY
 EVENT_MARKER_COLOR = DANGER
+NET_LINE_COLOR = ACCENT
 
 # When a categorical axis has more than this many items, hide outside text labels
 # on bars to reduce visual noise.
@@ -523,11 +538,11 @@ def create_visualizations(filtered_df, show_events: bool, start_year: Optional[i
         st.subheader(f"Licenses Issued by {_BUCKET_SINGULAR.get(bucket_size, bucket_size)}")
         events_df = load_timeline_events()
         plot_time_series(filtered_df, bucket_size, lock_y, events_df=events_df, show_events=show_events, start_year=start_year, end_year=end_year, comparison_state=comparison_state, full_df=full_df)
-        plot_yearly_retirements(filtered_df, start_year=start_year, end_year=end_year)
         active_df = status_agnostic_df if status_agnostic_df is not None else filtered_df
-        plot_net_change_per_year(active_df, start_year=start_year, end_year=end_year)
+        plot_issued_vs_departed(active_df, start_year=start_year, end_year=end_year)
         plot_active_licenses_per_year(active_df, start_year=start_year, end_year=end_year)
         plot_avg_license_age_per_year(active_df, start_year=start_year, end_year=end_year)
+        plot_years_licensed(active_df)
         st.subheader("Licenses Issued Over Time")
         plot_time_series_line(filtered_df, lock_y, events_df=events_df, show_events=show_events, start_year=start_year, end_year=end_year)
 
@@ -541,14 +556,22 @@ def create_visualizations(filtered_df, show_events: bool, start_year: Optional[i
                     if 'State' in filtered_df.columns else 0
                 )
                 st.subheader("Licenses by California County")
+                county_view = st.radio(
+                    "Show",
+                    [PER_CAPITA_LABEL, TOTAL_LABEL],
+                    horizontal=True,
+                    key="county_map_view",
+                    label_visibility="collapsed",
+                )
+                per_capita = county_view == PER_CAPITA_LABEL
                 if out_of_state_count > 0:
                     col_map, col_bubble = st.columns([4, 1])
                     with col_map:
-                        plot_ca_county_map(ca_data)
+                        plot_ca_county_map(ca_data, per_capita=per_capita)
                     with col_bubble:
                         _render_count_bubble(out_of_state_count, len(filtered_df), "Out of State")
                 else:
-                    plot_ca_county_map(ca_data)
+                    plot_ca_county_map(ca_data, per_capita=per_capita)
             if has_multi_state:
                 territory_count = (
                     int(
@@ -572,28 +595,147 @@ def create_visualizations(filtered_df, show_events: bool, start_year: Optional[i
             plot_status_pie(filtered_df)
 
 
+def _period_start(period) -> Optional[pd.Timestamp]:
+    """Start timestamp of a bucket label (pandas Period or 'YYYY-H1'/'YYYY-H2' string)."""
+    if hasattr(period, 'start_time'):
+        return period.start_time
+    text = str(period)
+    if '-H' in text:
+        year, half = text.split('-H')
+        return pd.Timestamp(year=int(year), month=1 if half == '1' else 7, day=1)
+    return None
+
+
+def _drop_future_periods(counts: pd.Series) -> pd.Series:
+    """Remove buckets that start after today (the year-range reindex pads out to Dec 31)."""
+    now = pd.Timestamp.now()
+    starts = [_period_start(p) for p in counts.index]
+    return counts[[st_ is None or st_ <= now for st_ in starts]]
+
+
+def _tint(hex_color: str, alpha: float) -> str:
+    """rgba() version of a #RRGGBB color at the given opacity."""
+    h = hex_color.lstrip('#')
+    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+    return f"rgba({r},{g},{b},{alpha})"
+
+
+PARTIAL_FILL_ALPHA = 0.35
+
+
+def _partial_bar_marker(color: str, is_partial) -> dict:
+    """Bar marker that shows partial/provisional bars as a light fill with a solid outline."""
+    return dict(
+        color=[_tint(color, PARTIAL_FILL_ALPHA) if p else color for p in is_partial],
+        line=dict(color=color, width=[1.5 if p else 0 for p in is_partial]),
+    )
+
+
+def _bar_labels(values, is_partial) -> list:
+    return [f"{int(v)} (YTD)" if p else f"{int(v)}" for v, p in zip(values, is_partial)]
+
+
+def _streak_text(streak: int) -> str:
+    if streak == 0:
+        return "Flat"
+    word = "rising" if streak > 0 else "falling"
+    n = abs(streak)
+    return f"{n} yr{'s' if n > 1 else ''} {word}"
+
+
+def _anchor_year(end_year: Optional[int]) -> int:
+    """Last complete year, capped at the slider's end year."""
+    last_complete = pd.Timestamp.now().year - 1
+    return min(int(end_year), last_complete) if end_year is not None else last_complete
+
+
+def _recent_stat_item(series: pd.Series, anchor: int, start_year: Optional[int], noun: str,
+                      recent: int = 5, delta_color: str = 'normal') -> Optional[dict]:
+    """Stat card: average of the last `recent` complete years vs. up to 10 years before them.
+
+    The baseline window is shortened so it never reaches before the slider's start year
+    (years outside the filter would otherwise count as zeros).
+    """
+    first_recent = anchor - recent + 1
+    if start_year is not None and first_recent < int(start_year):
+        return None
+    base_len = 10 if start_year is None else max(0, min(10, first_recent - int(start_year)))
+    recent_avg, base_avg, pct = recent_vs_baseline(series, anchor, recent=recent, baseline=max(base_len, 1))
+    delta = None
+    if base_len and pct is not None:
+        delta = f"{pct:+.0f}% vs. prior {base_len} yrs"
+    help_text = f"Average {noun.lower()} per year over the last {recent} complete years"
+    if base_len:
+        help_text += f", compared with {base_avg:.0f}/yr over the {base_len} years before that"
+    return dict(
+        label=f"{noun}, {first_recent}–{anchor}",
+        value=f"{recent_avg:.0f}/yr",
+        delta=delta,
+        delta_color=delta_color,
+        help=help_text + ".",
+    )
+
+
+def _issuance_stat_items(filtered_df, start_year=None, end_year=None) -> list:
+    """Recent-vs-baseline stat cards for the issuance chart (always computed per year)."""
+    per_year = issued_per_year(filtered_df)
+    if per_year.empty:
+        return []
+    anchor = _anchor_year(end_year)
+    lo = int(start_year) if start_year is not None else int(per_year.index.min())
+    if anchor <= lo:
+        return []
+    full = per_year.reindex(range(lo, anchor + 1), fill_value=0)
+
+    items = []
+    recent = _recent_stat_item(full, anchor, start_year, "Issued")
+    if recent:
+        items.append(recent)
+    last, prev = int(full.loc[anchor]), int(full.loc[anchor - 1])
+    items.append(dict(
+        label=f"Issued in {anchor}",
+        value=f"{last:,}",
+        delta=_fmt_delta(last - prev, f"vs. {anchor - 1}"),
+    ))
+    items.append(dict(
+        label="Year-over-Year Trend",
+        value=_streak_text(trend_streak(full)),
+        help=f"Consecutive years in which annual issuance moved in the same direction, ending {anchor}.",
+    ))
+    items.append(dict(
+        label="Peak Year",
+        value=f"{int(full.idxmax())} ({int(full.max()):,})",
+        help="Year with the most licenses issued in the selected range.",
+    ))
+    return items
+
+
 def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_df: Optional[pd.DataFrame] = None, show_events: bool = False, start_year: Optional[int] = None, end_year: Optional[int] = None, comparison_state: str = None, full_df=None):
     if 'Original Issue Date' not in filtered_df.columns or not pd.api.types.is_datetime64_any_dtype(filtered_df['Original Issue Date']):
         st.info("Original Issue Date column not found or not datetime.")
         return
 
     license_counts = _count_by_period(filtered_df, bucket_size, start_year, end_year)
+    license_counts = _drop_future_periods(license_counts)
 
     if license_counts.empty:
         st.info("No time-series data for the selected filters.")
         return
 
     show_labels = len(license_counts) <= BAR_LABEL_MAX_CATEGORIES
+    current_label = to_bucket_label(pd.Timestamp.now(), bucket_size)
+    is_partial = [str(p) == current_label for p in license_counts.index]
 
     fig = go.Figure()
     fig.add_trace(go.Bar(
         x=[str(p) for p in license_counts.index],
         y=license_counts.values,
         name='Main Data',
-        marker_color=MAIN_BAR_COLOR,
-        text=license_counts.values if show_labels else None,
+        marker=_partial_bar_marker(MAIN_BAR_COLOR, is_partial),
+        text=_bar_labels(license_counts.values, is_partial) if show_labels else None,
         textposition='outside' if show_labels else 'none',
-        hovertemplate='<b>Period:</b> %{x}<br><b>Licenses:</b> %{y}<extra></extra>',
+        customdata=['Partial period (to date)' if p else '' for p in is_partial],
+        hovertemplate='<b>Period:</b> %{x}<br><b>Licenses:</b> %{y}<br>%{customdata}<extra></extra>',
     ))
 
     if comparison_state and comparison_state != 'None' and full_df is not None:
@@ -611,8 +753,8 @@ def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_
             x=[str(p) for p in comp_counts.index],
             y=comp_counts.values,
             name=f'{comparison_state} (Comparison)',
-            marker_color=COMPARISON_BAR_COLOR,
-            text=comp_counts.values if show_labels else None,
+            marker=_partial_bar_marker(COMPARISON_BAR_COLOR, is_partial),
+            text=_bar_labels(comp_counts.values, is_partial) if show_labels else None,
             textposition='outside' if show_labels else 'none',
             opacity=0.75,
             hovertemplate=f'<b>Period:</b> %{{x}}<br><b>{comparison_state} Licenses:</b> %{{y}}<extra></extra>',
@@ -682,11 +824,15 @@ def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_
 
     st.plotly_chart(fig, use_container_width=True)
 
-    with st.expander("Time Series Statistics"):
-        c1, c2, c3 = st.columns(3)
-        with c1: st.metric("Peak Period", str(license_counts.idxmax()))
-        with c2: st.metric("Peak Count", int(license_counts.max()))
-        with c3: st.metric("Average per Period", f"{license_counts.mean():.1f}")
+    if any(is_partial):
+        st.caption(
+            f"The lightly shaded {current_label} bar is a partial period (to date) and will keep "
+            "growing until the period ends, so it isn't directly comparable with the full bars."
+        )
+
+    items = _issuance_stat_items(filtered_df, start_year, end_year)
+    if items:
+        _render_stat_row(items)
 
 
 def _detect_issue_date_anomalies(df_line: pd.DataFrame, license_col: str, window: int = 51, min_diff_years: float = 5.0) -> pd.DataFrame:
@@ -932,7 +1078,7 @@ def plot_status_pie(filtered_df):
             insidetextorientation='horizontal',
             textfont=dict(color='white', size=13),
             marker=dict(
-                colors=CATEGORICAL_SEQUENCE,
+                colors=[status_color(s) for s in status_counts.index],
                 line=dict(color='white', width=2),
             ),
             sort=False,
@@ -953,9 +1099,9 @@ def plot_status_pie(filtered_df):
 
     with c2:
         st.markdown("**Status Breakdown**")
-        for i, (status, count) in enumerate(status_counts.items()):
+        for status, count in status_counts.items():
             percentage = (count / total) * 100
-            color = CATEGORICAL_SEQUENCE[i % len(CATEGORICAL_SEQUENCE)]
+            color = status_color(status)
             st.markdown(
                 f"<div style='display:flex;align-items:center;gap:10px;margin:6px 0;'>"
                 f"<span style='display:inline-block;width:12px;height:12px;border-radius:3px;"
@@ -1024,37 +1170,66 @@ def plot_us_map(filtered_df):
         st.caption(f"Unmapped state values (not shown on map): {', '.join(unmapped)}")
 
 
-def plot_ca_county_map(filtered_df):
-    """Plot a choropleth map of California showing total licenses per county."""
+COUNTY_POPULATION_FILE = Path(__file__).resolve().parent / 'data' / 'ca_county_population.csv'
+COUNTY_POPULATION_SOURCE = "U.S. Census Bureau, Vintage 2024 county population estimates"
+PER_CAPITA_LABEL = "Per 100k residents"
+TOTAL_LABEL = "Total licenses"
+
+
+@st.cache_data(ttl=86400)
+def load_county_population(_file_mtime=None) -> Optional[pd.Series]:
+    """Population by 5-digit county FIPS code, or None if the reference file is missing."""
+    try:
+        pop = pd.read_csv(COUNTY_POPULATION_FILE, dtype={'FIPS': str})
+        return pop.set_index('FIPS')['Population']
+    except Exception:
+        return None
+
+
+def plot_ca_county_map(filtered_df, per_capita: bool = False):
+    """Plot a choropleth map of California counties: total licenses, or licenses per 100k residents."""
     if 'County' not in filtered_df.columns:
         st.info("No `County` column available for California county map.")
         return
 
+    population = load_county_population(_file_mtime=_file_hash(COUNTY_POPULATION_FILE)) if per_capita else None
+    if per_capita and population is None:
+        st.caption("County population data not found; showing total licenses instead.")
+        per_capita = False
+
     county_counts = filtered_df['County'].value_counts()
-
-    all_county_names = list(CA_COUNTY_FIPS.keys())
-    all_fips = list(CA_COUNTY_FIPS.values())
-    fips = all_fips.copy()
-    values = [0] * len(all_fips)
-    hover_text = [f"{name}: 0" for name in all_county_names]
-
-    fips_to_idx = {code: idx for idx, code in enumerate(fips)}
+    counts_by_fips = {}
+    names_by_fips = {code: name for name, code in CA_COUNTY_FIPS.items()}
     unmapped = []
-
     for county, count in county_counts.items():
         code = to_county_fips(county)
-        if code and code in fips_to_idx:
-            idx = fips_to_idx[code]
-            values[idx] = int(count)
-            hover_text[idx] = f"{county}: {count}"
-        elif code:
-            fips.append(code)
-            values.append(int(count))
-            hover_text.append(f"{county}: {count}")
+        if code:
+            counts_by_fips[code] = counts_by_fips.get(code, 0) + int(count)
+            names_by_fips.setdefault(code, str(county))
         else:
             unmapped.append(county)
 
-    if not fips:
+    all_fips = list(CA_COUNTY_FIPS.values())
+    fips = all_fips + [c for c in counts_by_fips if c not in all_fips]
+    counts = [counts_by_fips.get(code, 0) for code in fips]
+
+    if per_capita:
+        pops = [population.get(code) for code in fips]
+        values = [(c / p * 100_000) if p else None for c, p in zip(counts, pops)]
+        hover_text = [
+            f"<b>{names_by_fips.get(code, code)}</b><br>{v:.1f} per 100k residents<br>"
+            f"{c:,} licenses · pop. {p:,.0f}" if v is not None
+            else f"<b>{names_by_fips.get(code, code)}</b><br>{c:,} licenses"
+            for code, c, p, v in zip(fips, counts, pops, values)
+        ]
+        colorbar_title = 'Per 100k'
+    else:
+        values = counts
+        hover_text = [f"<b>{names_by_fips.get(code, code)}</b><br>{c:,} licenses" for code, c in zip(fips, counts)]
+        colorbar_title = 'Licenses'
+
+    finite = [v for v in values if v is not None]
+    if not finite:
         st.info("No mappable California county values found for the map.")
         return
 
@@ -1065,11 +1240,12 @@ def plot_ca_county_map(filtered_df):
         geojson='https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json',
         colorscale=RED_SCALE,
         zmin=0,
-        zmax=max(values) if values else 100,
+        zmax=max(finite) or 1,
         text=hover_text,
+        hoverinfo='text',
         marker_line_color=BORDER,
         marker_line_width=0.5,
-        colorbar=dict(title='Licenses', ticks='outside', outlinewidth=0, thickness=14),
+        colorbar=dict(title=colorbar_title, ticks='outside', outlinewidth=0, thickness=14),
     ))
 
     fig.update_geos(
@@ -1085,96 +1261,27 @@ def plot_ca_county_map(filtered_df):
 
     st.plotly_chart(fig, use_container_width=True)
 
+    if per_capita:
+        st.caption(
+            "Licenses per 100,000 residents, so large counties don't dominate simply because "
+            f"more people live there. Population: {COUNTY_POPULATION_SOURCE}. Counts follow the "
+            "sidebar filters — select only Active in License Status for today's coverage."
+        )
     if unmapped:
-        st.caption(f"Unmapped county values (not shown on map): {', '.join(unmapped)}")
+        st.caption(f"Unmapped county values (not shown on map): {', '.join(map(str, unmapped))}")
 
 
-# ---------- Yearly retirements (expirations) ----------
+# ---------- Issued vs. departed (inflow / outflow / net) ----------
 
-def plot_yearly_retirements(filtered_df, start_year=None, end_year=None):
-    """Bar chart of license retirements by year (non-Active statuses, completed years only)."""
-    st.subheader("License Expirations (Retirements) by Year")
+def plot_issued_vs_departed(filtered_df, start_year=None, end_year=None):
+    """Combined flow chart: issued bars up, departures down, net change as a line."""
+    st.subheader("Licenses Issued vs. Leaving the Rolls by Year")
     st.caption(
-        "Counts licenses whose status is no longer Active (Cancelled, Retired, Deceased, "
-        "Delinquent, Revoked, Voluntary Surrender) grouped by the year their Expiration Date falls in. "
-        "The current year is excluded because the renewal cycle is still in progress — "
-        "active licenses pending renewal would otherwise inflate this year's bar."
-    )
-
-    if 'Expiration Date' not in filtered_df.columns:
-        st.info("No Expiration Date column available.")
-        return
-    if not pd.api.types.is_datetime64_any_dtype(filtered_df['Expiration Date']):
-        st.info("Expiration Date is not in datetime format.")
-        return
-    if 'License Status' not in filtered_df.columns:
-        st.info("License Status column is required to identify retirements.")
-        return
-
-    df = filtered_df.dropna(subset=['Expiration Date']).copy()
-    df = df[df['License Status'].fillna('').str.strip().str.lower() != 'active']
-
-    current_year = pd.Timestamp.now().year
-    last_complete_year = current_year - 1
-    df['Exp_Year'] = df['Expiration Date'].dt.year.astype(int)
-
-    df = df[df['Exp_Year'] <= last_complete_year]
-    if start_year is not None:
-        df = df[df['Exp_Year'] >= int(start_year)]
-    if end_year is not None:
-        df = df[df['Exp_Year'] <= min(int(end_year), last_complete_year)]
-
-    yearly = df.groupby('Exp_Year').size().reset_index(name='Expired')
-    yearly = yearly.sort_values('Exp_Year')
-
-    if yearly.empty:
-        st.info("No expiration data for the selected range.")
-        return
-
-    show_labels = len(yearly) <= BAR_LABEL_MAX_CATEGORIES
-
-    fig = go.Figure()
-    fig.add_trace(go.Bar(
-        x=yearly['Exp_Year'], y=yearly['Expired'],
-        name='Licenses Expired', marker_color=EXPIRATION_BAR_COLOR,
-        text=yearly['Expired'] if show_labels else None,
-        textposition='outside' if show_labels else 'none',
-        hovertemplate='<b>Year %{x}</b><br>Expired: %{y}<extra></extra>',
-    ))
-
-    fig.update_layout(
-        xaxis_title="Year",
-        yaxis_title="Licenses Expired",
-        height=460,
-        showlegend=False,
-        hovermode='x unified',
-        bargap=0.18,
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-
-    with st.expander("Expiration Statistics"):
-        c1, c2, c3 = st.columns(3)
-        peak_idx = yearly['Expired'].idxmax()
-        with c1:
-            st.metric("Peak Year", int(yearly.loc[peak_idx, 'Exp_Year']))
-        with c2:
-            st.metric("Peak Expirations", int(yearly['Expired'].max()))
-        with c3:
-            st.metric("Avg per Year", f"{yearly['Expired'].mean():.1f}")
-
-
-# ---------- Net change per year ----------
-
-def plot_net_change_per_year(filtered_df, start_year=None, end_year=None):
-    """Diverging bar chart: licenses issued minus licenses leaving the rolls, per year."""
-    st.subheader("Net Change in Licenses by Year")
-    st.caption(
-        "Licenses issued minus licenses leaving the rolls (status no longer Active, counted "
-        "by the year their Expiration Date falls in) — the growth story in one view. "
-        "Emerald bars are net growth; red bars are net decline. Ignores the License Status "
-        "sidebar filter so both sides of the ledger stay comparable. The current year is "
-        "excluded while its renewal cycle is in progress."
+        "Bars above zero are licenses issued; bars below zero are licenses that left the rolls "
+        "(status no longer Active — Cancelled, Retired, Deceased, Delinquent, Revoked, Voluntary "
+        "Surrender — counted by the year their Expiration Date falls in). The line is the net "
+        "change. Ignores the License Status sidebar filter so both sides stay comparable. The "
+        "current year is excluded while its renewal cycle is in progress."
     )
 
     has_issue = 'Original Issue Date' in filtered_df.columns and pd.api.types.is_datetime64_any_dtype(filtered_df['Original Issue Date'])
@@ -1183,68 +1290,98 @@ def plot_net_change_per_year(filtered_df, start_year=None, end_year=None):
         st.info("Original Issue Date, Expiration Date, and License Status are needed for this chart.")
         return
 
-    last_complete_year = pd.Timestamp.now().year - 1
+    anchor = _anchor_year(end_year)
     lo = int(start_year) if start_year is not None else int(filtered_df['Original Issue Date'].dt.year.min())
-    hi = min(int(end_year), last_complete_year) if end_year is not None else last_complete_year
-    if lo > hi:
+    if lo > anchor:
         st.info("No complete years in the selected range.")
         return
 
-    years = pd.Index(range(lo, hi + 1))
-    issued = (
-        filtered_df.dropna(subset=['Original Issue Date'])['Original Issue Date']
-        .dt.year.value_counts().reindex(years, fill_value=0)
-    )
-    non_active = filtered_df['License Status'].fillna('').str.strip().str.lower() != 'active'
-    leavers = filtered_df[non_active].dropna(subset=['Expiration Date'])
-    left = leavers['Expiration Date'].dt.year.value_counts().reindex(years, fill_value=0)
+    years = pd.Index(range(lo, anchor + 1))
+    issued = issued_per_year(filtered_df).reindex(years, fill_value=0)
+    left = departed_per_year(filtered_df).reindex(years, fill_value=0)
     net = issued - left
 
+    provisional_from = pd.Timestamp.now().year - PROVISIONAL_DEPARTURE_YEARS
+    is_prov = [y >= provisional_from for y in years]
     show_labels = len(years) <= BAR_LABEL_MAX_CATEGORIES
 
     fig = go.Figure()
-    for name, color, mask in [
-        ('Net gain', SUCCESS, net >= 0),
-        ('Net loss', DANGER, net < 0),
+    fig.add_trace(go.Bar(
+        x=years, y=issued.values,
+        name='Issued', marker_color=MAIN_BAR_COLOR,
+        text=issued.values if show_labels else None,
+        textposition='outside' if show_labels else 'none',
+        hovertemplate='Issued: %{y:,}<extra></extra>',
+    ))
+    # Settled and provisional departures are separate traces so the legend explains the shading.
+    prov_mask = pd.Series(is_prov, index=years)
+    for name, mask, provisional in [
+        ('Left the rolls', ~prov_mask, False),
+        ('Left the rolls (provisional)', prov_mask, True),
     ]:
-        subset = net[mask]
-        if subset.empty:
+        sub = left[mask.values]
+        if sub.empty:
             continue
         fig.add_trace(go.Bar(
-            x=subset.index,
-            y=subset.values,
+            x=sub.index, y=-sub.values,
             name=name,
-            marker_color=color,
-            text=[f"{int(v):+d}" for v in subset.values] if show_labels else None,
+            marker=_partial_bar_marker(EXPIRATION_BAR_COLOR, [provisional] * len(sub)),
+            text=sub.values if show_labels else None,
             textposition='outside' if show_labels else 'none',
-            customdata=pd.concat([issued[mask], left[mask]], axis=1).values,
-            hovertemplate=(
-                '<b>%{x}</b><br>Net: %{y:+,}<br>'
-                'Issued: %{customdata[0]:,}<br>'
-                'Left the rolls: %{customdata[1]:,}<extra></extra>'
-            ),
+            customdata=sub.values,
+            hovertemplate=f'{name}: %{{customdata:,}}<extra></extra>',
         ))
+    fig.add_trace(go.Scatter(
+        x=years, y=net.values,
+        name='Net change', mode='lines+markers',
+        line=dict(color=NET_LINE_COLOR, width=2),
+        marker=dict(size=4, color=NET_LINE_COLOR),
+        hovertemplate='Net: %{y:+,}<extra></extra>',
+    ))
 
     fig.update_layout(
         xaxis_title="Year",
-        yaxis_title="Net Licenses (Issued − Departed)",
-        height=460,
+        yaxis_title="Licenses (issued ↑ / departed ↓)",
+        height=480,
         hovermode='x unified',
         barmode='relative',
         bargap=0.18,
+        legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='left', x=0),
     )
-    fig.update_yaxes(zeroline=True, zerolinecolor=BORDER, zerolinewidth=1.5)
+    fig.update_yaxes(zeroline=True, zerolinecolor=MUTED, zerolinewidth=1.5)
 
     st.plotly_chart(fig, use_container_width=True)
 
-    with st.expander("Net Change Statistics"):
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            st.metric("Best Year", f"{int(net.idxmax())} ({int(net.max()):+,})")
-        with c2:
-            st.metric("Worst Year", f"{int(net.idxmin())} ({int(net.min()):+,})")
-        with c3:
-            st.metric("Cumulative Net", f"{int(net.sum()):+,}")
+    if any(is_prov):
+        st.caption(
+            f"**Departures for {provisional_from}–{anchor} are provisional** (lightly shaded bars). Some "
+            "licenses counted as leaving in the most recent years may still renew or be "
+            "reclassified, so these bars — and the net line — can change in later updates."
+        )
+
+    items = []
+    for series, noun, color in [(issued, "Issued", 'normal'), (left, "Departed", 'inverse')]:
+        item = _recent_stat_item(series, anchor, start_year, noun, delta_color=color)
+        if item:
+            items.append(item)
+    # Net can sit near zero or flip sign, so compare it in licenses/yr rather than percent.
+    first_recent = anchor - 4
+    if first_recent >= lo:
+        recent_net = float(net.loc[first_recent:anchor].mean())
+        base = net.loc[max(lo, first_recent - 10):first_recent - 1]
+        items.append(dict(
+            label=f"Net Change, {first_recent}–{anchor}",
+            value=f"{recent_net:+.0f}/yr",
+            delta=_fmt_delta(recent_net - float(base.mean()), f"vs. prior {len(base)} yrs", fmt="{:+,.0f}/yr") if len(base) else None,
+            help="Average net change per year over the last 5 complete years, compared with "
+                 "the years before that.",
+        ))
+    items.append(dict(
+        label=f"Cumulative Net, {lo}–{anchor}",
+        value=f"{int(net.sum()):+,}",
+        help="Total issued minus total departed over the selected years.",
+    ))
+    _render_stat_row(items)
 
 
 # ---------- Active licenses per year ----------
@@ -1302,15 +1439,30 @@ def plot_active_licenses_per_year(filtered_df, start_year=None, end_year=None):
 
     st.plotly_chart(fig, use_container_width=True)
 
-    with st.expander("Active License Statistics"):
-        c1, c2, c3 = st.columns(3)
-        peak_idx = active_counts.index(max(active_counts))
-        with c1:
-            st.metric("Peak Year", years[peak_idx])
-        with c2:
-            st.metric("Peak Count", f"{max(active_counts):,}")
-        with c3:
-            st.metric("Current", f"{active_counts[-1]:,}" if active_counts else "N/A")
+    by_year = dict(zip(years, active_counts))
+    latest_year = years[-1]
+    peak_year = max(by_year, key=by_year.get)
+    items = [dict(
+        label=f"Active in {latest_year}",
+        value=f"{by_year[latest_year]:,}",
+        delta=_fmt_delta(by_year[latest_year] - by_year[latest_year - 1], f"vs. {latest_year - 1}")
+        if latest_year - 1 in by_year else None,
+    )]
+    for span in (10, 25):
+        then = latest_year - span
+        if then in by_year and by_year[then]:
+            pct = (by_year[latest_year] - by_year[then]) / by_year[then] * 100
+            items.append(dict(
+                label=f"Change Since {then}",
+                value=f"{pct:+.0f}%",
+                help=f"{by_year[then]:,} licenses were active in {then}.",
+            ))
+    items.append(dict(
+        label="Peak Year",
+        value=f"{peak_year} ({by_year[peak_year]:,})",
+        help="Year with the most licenses in force in the selected range.",
+    ))
+    _render_stat_row(items)
 
 
 # ---------- Average license age per year ----------
@@ -1376,19 +1528,88 @@ def plot_avg_license_age_per_year(filtered_df, start_year=None, end_year=None):
 
     st.plotly_chart(fig, use_container_width=True)
 
-    valid = [(y, a) for y, a in zip(years, avg_ages) if a is not None]
+    valid = {y: a for y, a in zip(years, avg_ages) if a is not None}
     if valid:
-        ages_only = [a for _, a in valid]
-        min_idx = ages_only.index(min(ages_only))
-        max_idx = ages_only.index(max(ages_only))
-        with st.expander("Average Age Statistics"):
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                st.metric("Youngest Cohort Year", f"{valid[min_idx][0]} ({valid[min_idx][1]:.1f} yrs)")
-            with c2:
-                st.metric("Oldest Cohort Year", f"{valid[max_idx][0]} ({valid[max_idx][1]:.1f} yrs)")
-            with c3:
-                st.metric("Most Recent Year", f"{valid[-1][0]} ({valid[-1][1]:.1f} yrs)")
+        latest_year = max(valid)
+        latest = valid[latest_year]
+        oldest_year = max(valid, key=valid.get)
+        items = [dict(
+            label=f"Average Age in {latest_year}",
+            value=f"{latest:.1f} yrs",
+            delta="Highest on record" if oldest_year == latest_year else None,
+            delta_color='off',
+        )]
+        for span in (10, 25):
+            then = latest_year - span
+            if then in valid:
+                items.append(dict(
+                    label=f"Change Since {then}",
+                    value=f"{latest - valid[then]:+.1f} yrs",
+                    help=f"Average age was {valid[then]:.1f} years in {then}.",
+                ))
+        if oldest_year != latest_year:
+            items.append(dict(
+                label="Oldest Year",
+                value=f"{oldest_year} ({valid[oldest_year]:.1f} yrs)",
+                help="Year with the highest average license age in the selected range.",
+            ))
+        _render_stat_row(items)
+
+
+# ---------- Years licensed (tenure) of today's active licensees ----------
+
+def plot_years_licensed(filtered_df):
+    """Histogram of how long today's Active licensees have held their license."""
+    st.subheader("How Long Today's Active Licensees Have Been Licensed")
+    st.caption(
+        f"Years since Original Issue Date for every license with status Active today, in "
+        f"5-year groups. Groups of {SENIOR_TENURE_YEARS}+ years (amber) are the licensees most "
+        "likely to retire over the next decade. This is time since licensure, not age. Follows "
+        "the State and date-range filters but always shows Active licenses, regardless of the "
+        "License Status filter. A few reinstated licenses carry their reinstatement date as the "
+        "issue date (see the last chart on this tab), so they appear newer than they are."
+    )
+
+    has_issue = 'Original Issue Date' in filtered_df.columns and pd.api.types.is_datetime64_any_dtype(filtered_df['Original Issue Date'])
+    if not has_issue or 'License Status' not in filtered_df.columns:
+        st.info("Original Issue Date and License Status are needed for this chart.")
+        return
+
+    tenure = years_licensed(filtered_df, pd.Timestamp.now())
+    if tenure.empty:
+        st.info("No Active licenses in the current selection.")
+        return
+
+    hist = tenure_histogram(tenure)
+    edges = TENURE_BIN_EDGES + [None]
+    senior = [lo >= SENIOR_TENURE_YEARS for lo in edges[:-1]]
+    total = int(hist.sum())
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=list(hist.index), y=hist.values,
+        marker_color=[ACCENT if s_ else PRIMARY for s_ in senior],
+        text=hist.values,
+        textposition='outside',
+        customdata=[f"{v / total:.1%}" for v in hist.values],
+        hovertemplate='<b>%{x} years</b><br>Licensees: %{y:,}<br>Share: %{customdata}<extra></extra>',
+    ))
+    fig.update_layout(
+        xaxis_title="Years licensed",
+        yaxis_title="Active licensees",
+        height=440,
+        showlegend=False,
+        bargap=0.12,
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    n_senior = int((tenure >= SENIOR_TENURE_YEARS).sum())
+    n_new = int((tenure < 10).sum())
+    _render_stat_row([
+        dict(label=f"Licensed {SENIOR_TENURE_YEARS}+ Years", value=f"{n_senior:,} ({n_senior / total:.0%})"),
+        dict(label="Licensed Under 10 Years", value=f"{n_new:,} ({n_new / total:.0%})"),
+        dict(label="Median Years Licensed", value=f"{tenure.median():.1f} yrs"),
+    ])
 
 
 def _get_current_filters_from_session(df) -> dict:
@@ -1462,40 +1683,108 @@ def _display_sidebar_metrics(filtered_df):
     st.sidebar.markdown(table_html, unsafe_allow_html=True)
 
 
+def _fmt_delta(diff: Optional[float], suffix: str, fmt: str = "{:+,.0f}") -> Optional[str]:
+    """Format a st.metric delta string; Streamlit colors it by the leading sign."""
+    if diff is None:
+        return None
+    if round(diff) == 0:
+        return f"0 {suffix}"
+    return f"{fmt.format(diff)} {suffix}"
+
+
+def _render_stat_row(items):
+    """Render a row of st.metric cards.
+
+    `items` is a list of dicts with keys label, value, and optional delta, help,
+    delta_color. Shown directly under a chart (not in an expander) so the
+    takeaway is visible without a click.
+    """
+    cols = st.columns(len(items))
+    for col, item in zip(cols, items):
+        with col:
+            st.metric(
+                item['label'],
+                item['value'],
+                delta=item.get('delta'),
+                delta_color=item.get('delta_color', 'normal'),
+                help=item.get('help'),
+            )
+
+
 def _display_headline_stats(df):
-    """Three headline metrics under the title — the story before the first scroll.
+    """Four headline metrics under the title — the story before the first scroll.
 
     Always computed from the full, unfiltered dataset so the numbers match the
-    public record regardless of sidebar filters.
+    public record regardless of sidebar filters. Each number carries a
+    comparison so the reader can tell whether it is good, bad, or normal.
     """
     has_status = 'License Status' in df.columns
     has_issue = 'Original Issue Date' in df.columns and pd.api.types.is_datetime64_any_dtype(df['Original Issue Date'])
     has_exp = 'Expiration Date' in df.columns and pd.api.types.is_datetime64_any_dtype(df['Expiration Date'])
 
+    now = pd.Timestamp.now().normalize()
+    year_ago = now - pd.DateOffset(years=1)
+    last_complete_year = now.year - 1
+
+    items = []
+
+    # 1. Active licenses, vs. a year ago
     n_active = int((df['License Status'].str.strip().str.lower() == 'active').sum()) if has_status else None
-    first_year = int(df['Original Issue Date'].dt.year.min()) if has_issue else None
+    active_delta = None
+    if has_issue and has_exp:
+        active_delta = _fmt_delta(active_on(df, now) - active_on(df, year_ago), "vs. a year ago")
+    items.append(dict(
+        label="Active SE Licenses",
+        value=f"{n_active:,}" if n_active is not None else "N/A",
+        delta=active_delta,
+        help="Licenses with status Active today. The change compares licenses in force today "
+             "with licenses in force one year ago, based on issue and expiration dates.",
+    ))
 
-    last_complete_year = pd.Timestamp.now().year - 1
-    net_last_year = None
+    # 2. Issued in the last 12 months, vs. the 10-year average
+    if has_issue:
+        issued_12m = int(((df['Original Issue Date'] > year_ago) & (df['Original Issue Date'] <= now)).sum())
+        per_year = issued_per_year(df)
+        avg_10 = float(per_year.reindex(range(last_complete_year - 9, last_complete_year + 1), fill_value=0).mean())
+        items.append(dict(
+            label="Issued in Last 12 Months",
+            value=f"{issued_12m:,}",
+            delta=_fmt_delta(issued_12m - avg_10, f"vs. 10-yr avg ({avg_10:.0f}/yr)"),
+            help=f"New SE licenses issued between {year_ago:%b %d, %Y} and today, compared with "
+                 f"the average per year over {last_complete_year - 9}–{last_complete_year}.",
+        ))
+
+    # 3. Net change in the last complete year, vs. the 10-year average
     if has_status and has_issue and has_exp:
-        issued_ly = int((df['Original Issue Date'].dt.year == last_complete_year).sum())
-        non_active = df['License Status'].fillna('').str.strip().str.lower() != 'active'
-        left_ly = int(((df['Expiration Date'].dt.year == last_complete_year) & non_active).sum())
-        net_last_year = issued_ly - left_ly
-
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.metric("Active SE Licenses", f"{n_active:,}" if n_active is not None else "N/A")
-    with c2:
-        label = f"Licenses Issued Since {first_year}" if first_year else "Total Licenses Issued"
-        st.metric(label, f"{len(df):,}")
-    with c3:
-        st.metric(
-            f"Net Change in {last_complete_year}",
-            f"{net_last_year:+,}" if net_last_year is not None else "N/A",
+        issued = issued_per_year(df)
+        departed = departed_per_year(df)
+        years = range(last_complete_year - 10, last_complete_year + 1)
+        net = issued.reindex(years, fill_value=0) - departed.reindex(years, fill_value=0)
+        net_ly = int(net.loc[last_complete_year])
+        avg_prior = float(net.loc[last_complete_year - 10:last_complete_year - 1].mean())
+        items.append(dict(
+            label=f"Net Change in {last_complete_year}",
+            value=f"{net_ly:+,}",
+            delta=_fmt_delta(net_ly - avg_prior, f"vs. 10-yr avg ({avg_prior:+.0f}/yr)"),
             help="Licenses issued minus licenses leaving the rolls in the last complete year. "
-                 "See the Net Change chart on the Time tab.",
-        )
+                 "Departures for recent years are provisional and may shrink as lapsed "
+                 "licenses renew. See the Issued vs. Leaving chart on the Time tab.",
+        ))
+
+    # 4. Share of active licensees licensed 30+ years
+    if has_status and has_issue:
+        tenure = years_licensed(df, now)
+        if len(tenure):
+            senior = int((tenure >= SENIOR_TENURE_YEARS).sum())
+            items.append(dict(
+                label=f"Active, Licensed {SENIOR_TENURE_YEARS}+ Years",
+                value=f"{senior / len(tenure):.0%}",
+                help=f"{senior:,} of {len(tenure):,} active licensees received their SE license "
+                     f"{SENIOR_TENURE_YEARS} or more years ago — the group most likely to retire "
+                     "in the coming decade. See the Years Licensed chart on the Time tab.",
+            ))
+
+    _render_stat_row(items)
 
 
 # ---------- App ----------

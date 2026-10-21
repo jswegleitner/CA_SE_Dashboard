@@ -25,6 +25,31 @@ CATEGORICAL_SEQUENCE = [
     PRIMARY, ACCENT, SUCCESS, DANGER, PURPLE, "#0891B2", NEUTRAL, "#DB2777",
 ]
 
+# Fixed status -> color map so a status keeps its color no matter which other
+# statuses survive the current filters (color follows the entity, not its rank).
+STATUS_COLORS = {
+    'Active': SUCCESS,
+    'Cancelled': NEUTRAL,
+    'Delinquent': ACCENT,
+    'Retired': PRIMARY,
+    'Deceased': PURPLE,
+    'Revoked': DANGER,
+    'Voluntary Surrender Of License': "#DB2777",
+}
+_STATUS_FALLBACK = ["#0891B2", MUTED, INK]
+
+
+def status_color(status) -> str:
+    """Stable color for a license status; unknown statuses get a deterministic fallback."""
+    key = str(status).strip()
+    if key in STATUS_COLORS:
+        return STATUS_COLORS[key]
+    for name, color in STATUS_COLORS.items():
+        if name.lower() == key.lower():
+            return color
+    return _STATUS_FALLBACK[sum(map(ord, key)) % len(_STATUS_FALLBACK)]
+
+
 # Sequential colorscales matched to palette
 BLUE_SCALE = [
     [0.0, "#F0F7FE"],
@@ -171,6 +196,28 @@ hr {
     font-size: 1.85rem !important;
     font-weight: 600;
     line-height: 1.1;
+}
+/* Wrap long labels/values/deltas instead of truncating them with an ellipsis
+   when four cards share a narrow row. */
+[data-testid="stMetric"] [data-testid="stMetricLabel"] *,
+[data-testid="stMetricValue"],
+[data-testid="stMetricValue"] *,
+[data-testid="stMetricDelta"],
+[data-testid="stMetricDelta"] * {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+}
+[data-testid="stMetricDelta"] {
+    height: auto !important;
+}
+[data-testid="stMetricValue"] {
+    font-size: clamp(1.25rem, 2.2vw, 1.85rem) !important;
+}
+/* Cards in one row share the tallest card's height. */
+[data-testid="stColumn"] > div:has(> div > [data-testid="stMetric"]),
+[data-testid="stColumn"] [data-testid="stMetric"] {
+    height: 100%;
 }
 
 /* ---------- Filter chip bar ---------- */
