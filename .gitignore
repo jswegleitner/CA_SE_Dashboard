@@ -27,6 +27,9 @@ Github Repo/
 Offline Processing/
 Other States Data/
 
+# Research source documents (copyrighted PDFs; research/SOURCES.md stays tracked)
+research/sources/
+
 # Environment
 .env
 .venv/

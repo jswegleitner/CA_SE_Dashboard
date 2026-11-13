@@ -50,6 +50,23 @@ def status_color(status) -> str:
     return _STATUS_FALLBACK[sum(map(ord, key)) % len(_STATUS_FALLBACK)]
 
 
+# Fixed category -> color map for licensure-history events (History tab lanes and
+# cards, Time-tab event lines). Checked with the dataviz palette validator in this
+# lane order: every adjacent pair clears the color-vision-deficiency and
+# normal-vision separation floors, which the darker PRIMARY/SUCCESS pair did not.
+HISTORY_CATEGORY_COLORS = {
+    'Licensure': "#2563EB",
+    'Exam': ACCENT,
+    'Building code': "#0891B2",
+    'Legislation': PURPLE,
+    'Earthquake or disaster': DANGER,
+}
+
+
+def history_category_color(category) -> str:
+    return HISTORY_CATEGORY_COLORS.get(str(category).strip(), NEUTRAL)
+
+
 # Sequential colorscales matched to palette
 BLUE_SCALE = [
     [0.0, "#F0F7FE"],
@@ -357,6 +374,102 @@ button[data-baseweb="tab"] p {
 /* ---------- Subheaders inside tabs ---------- */
 .stTabs h2, .stTabs h3 {
     margin-top: 1rem;
+}
+
+/* ---------- History tab ---------- */
+.hist-era {
+    margin: 1.9rem 0 0.75rem 0;
+}
+.hist-era h3 {
+    margin: 0 0 0.2rem 0;
+    padding: 0;
+    font-size: 1.25rem;
+}
+.hist-era-blurb {
+    color: #64748B;
+    font-size: 0.95rem;
+    margin: 0;
+    max-width: 80ch;
+}
+.hist-card {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-left: 4px solid #94A3B8;
+    border-radius: 10px;
+    padding: 14px 18px 12px 18px;
+    margin: 0 0 12px 0;
+}
+.hist-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    align-items: center;
+    margin-bottom: 4px;
+}
+.hist-date {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #475569;
+    font-variant-numeric: tabular-nums;
+}
+.hist-cat {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #64748B;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+.hist-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    display: inline-block;
+}
+.hist-title {
+    font-size: 1.08rem;
+    font-weight: 600;
+    color: #1E293B;
+    line-height: 1.35;
+    margin: 0 0 6px 0;
+}
+.hist-card p.hist-text {
+    font-size: 0.93rem;
+    color: #334155;
+    line-height: 1.55;
+    margin: 0 0 8px 0;
+    max-width: 82ch;
+}
+.hist-label {
+    display: inline-block;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #64748B;
+    margin-right: 8px;
+}
+.hist-card p.hist-data {
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 8px;
+    padding: 8px 12px;
+}
+.hist-card p.hist-src {
+    font-size: 0.78rem;
+    color: #64748B;
+    line-height: 1.5;
+    margin: 4px 0 0 0;
+}
+.hist-src a {
+    color: #1F4E79;
+    text-decoration: none;
+    border-bottom: 1px solid #BFDBFE;
+}
+.hist-src a:hover {
+    border-bottom-color: #1F4E79;
 }
 
 /* ---------- Mobile ---------- */

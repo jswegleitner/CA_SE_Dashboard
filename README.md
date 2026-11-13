@@ -67,14 +67,14 @@ CA License Dashboard/
 ├── run_pipeline.bat                      # One-click monthly refresh
 ├── run_dashboard.bat                     # One-click dashboard launch
 ├── dashboard_lib/                        # Extracted helpers
-│   ├── timeline.py                       # Timeline event loading + hover formatting
+│   ├── timeline.py                       # Chart-overlay events + hover formatting
+│   ├── history.py                        # Licensure-history loader and helpers (History tab)
 │   ├── periods.py                        # Period bucketing primitives
 │   ├── geo.py                            # State/county name → code lookups
 │   └── theme.py                          # Unified palette, Plotly template, CSS overrides
 ├── data/                                 # Tracked CSV data (auto-populated by pipeline)
 │   ├── ProfEngrsLandSurvyrsGeologist_Data00_structural_engineers_cleaned.csv
-│   ├── timeline_events.csv               # Timeline event annotations
-│   └── License History Table.csv         # Source for timeline events
+│   └── licensure_history.csv             # Licensure, exam, code, law and earthquake history (hand-maintained)
 ├── requirements.txt                      # Python dependencies
 ├── .gitignore
 ├── README.md                             # This file
@@ -92,9 +92,10 @@ CA License Dashboard/
 │       ├── notfound/<n>.html             # No-results pages
 │       ├── archive/<n>_<label>_<ts>.html # Pre-rescan HTML snapshots
 │       └── needs_rescan.txt              # Rescan queue (managed by reconciler + fetcher)
-├── tools/
-│   └── reprocess_timeline.py             # Regenerates data/timeline_events.csv
-├── tests/                                # pytest suite (run with `pytest`)
+├── research/
+│   ├── SOURCES.md                        # Index of sources behind the History tab
+│   └── sources/                          # Source PDFs (gitignored: copyrighted material)
+├── tests/                                # pytest suite (run with `pytest tests`)
 └── .streamlit/
     └── config.toml                       # Streamlit UI configuration
 ```
@@ -123,7 +124,8 @@ CA License Dashboard/
 - Streamlit Cloud sees the new data once you commit `data/`.
 
 ### Interactive Dashboard
-- **Tabbed layout** — Activity / Geography / Status, replacing a single long scroll
+- **Tabbed layout** — Time / Geography / Status / History, replacing a single long scroll
+- **History tab** — what the Structural Engineer license is and how it got that way: a timeline of licensure, exam, building-code, legislative and earthquake events set against licenses issued per year, with a sourced write-up of each event and notes on what the license counts do and don't show
 - **Filter chip summary** — chip bar above the metrics shows only the filters that differ from defaults, with a quiet "No filters applied" state when clean
 - **Unified visual theme** — single palette, Plotly template, and CSS injected from `dashboard_lib/theme.py` so every chart, card, tab, and chip reads as one design
 - **Real-time filtering** — by state, license status, year range, and comparison state. The historical-cohort charts (Active Licenses, Average Age) bypass the License Status filter so picking "Active" doesn't collapse the past-year view.
@@ -153,31 +155,32 @@ CA License Dashboard/
 - **Skip options** - Reuse existing downloaded files
 - **Progress tracking** - Clear status updates at each step
 
-## Timeline Events (Exam/Code History)
+## Licensure History (History tab and chart overlays)
 
-The dashboard overlays key timeline events on time-series charts using `timeline_events.csv`.
+`data/licensure_history.csv` is the single, hand-maintained record of licensure, exam,
+building-code, legislative and earthquake events. The **History** tab shows every row as a
+sourced entry and plots them against licenses issued per year. Rows with `on_chart` = 1 are
+also overlaid on the Time-tab charts. There is no build step: edit the CSV and rerun.
 
-Required columns:
-- `start_date` (YYYY-MM-DD)
-- `label` (short title)
-- `type` (e.g., `SE Exam`)
+Columns:
+- `date` (YYYY-MM-DD) and `precision` (`day`, `month` or `year`: how exactly the date is known;
+  a year-only event is stored as January 1 and displayed as just the year)
+- `category`: `Licensure`, `Exam`, `Building code`, `Legislation` or `Earthquake or disaster`
+- `title`, `summary` (what happened), `significance` (why it matters)
+- `data_note` (optional): what the license data shows around that event
+- `codes`, `exam_format` (optional): detail shown on exam entries and in chart tooltips
+- `on_chart` (0/1), `chart_note` (one-line tooltip, required when `on_chart` is 1),
+  `chart_label` (optional short label drawn on the History timeline)
+- `sources`: `Label <https://url>; Label <https://url>; Label with no link`
 
-Preferred detail columns:
-- `Code` — code references (e.g., IBC/ASCE/ACI)
-- `Format` — exam format details
-- `Notes` — additional context
-
-If your CSV only has a single `description` field (with lines starting `Codes:`, `Format:`, `Notes:`), the app parses it automatically.
-
-Update the timeline file:
-
-```bash
-python tools/reprocess_timeline.py
-```
+`tests/test_history.py` checks the file (valid categories and dates, a source on every entry,
+well-formed links), so a bad hand edit fails the tests rather than the page.
+`research/SOURCES.md` lists the documents behind the entries.
 
 Notes:
 - The events toggle is at the top of the "Filters" section in the sidebar.
-- Date filters constrain both charts and events; events do not extend axes.
+- Date filters constrain the Time-tab charts and their event overlays; the History tab always
+  shows the whole record.
 
 ## Troubleshooting
 
@@ -226,7 +229,7 @@ The dashboard looks for CSV files in this order:
 3. Any CSV in `data/` or the project root with license data columns.
 4. File upload widget.
 
-Timeline events (`timeline_events.csv`) are looked up the same way: `data/` first, then the project root.
+History events are read from `data/licensure_history.csv`. A legacy `timeline_events.csv` (in `data/` or the project root) is still honored for the chart overlays if the history file is absent.
 
 ## Data Privacy
 

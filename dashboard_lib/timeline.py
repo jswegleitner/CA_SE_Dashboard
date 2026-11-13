@@ -6,10 +6,12 @@ from typing import Optional
 import pandas as pd
 import streamlit as st
 
+from dashboard_lib.history import format_event_date, history_path, read_history_csv
+
 
 def _local_events_mtime() -> Optional[float]:
     root = Path(__file__).resolve().parents[1]
-    for candidate in (root / 'data' / 'timeline_events.csv', root / 'timeline_events.csv'):
+    for candidate in (history_path(), root / 'data' / 'timeline_events.csv', root / 'timeline_events.csv'):
         if candidate.exists():
             return candidate.stat().st_mtime
     return None
@@ -17,20 +19,44 @@ def _local_events_mtime() -> Optional[float]:
 
 def load_timeline_events() -> Optional[pd.DataFrame]:
     """Cached loader keyed on the local CSV's mtime, so edits to
-    timeline_events.csv show up without restarting the app."""
+    licensure_history.csv show up without restarting the app."""
     return _load_timeline_events(events_mtime=_local_events_mtime())
+
+
+def history_to_chart_events(history: pd.DataFrame) -> pd.DataFrame:
+    """Chart-overlay rows from the licensure history: only events flagged on_chart.
+
+    Returns the same shape the overlay code has always consumed (start_date,
+    end_date, label, type, code, format, notes, description), plus date_text:
+    the date worded as precisely as it is known ('1931', 'April 1988').
+    """
+    rows = history[history['on_chart']].copy()
+    out = pd.DataFrame({
+        'start_date': rows['date'].values,
+        'end_date': pd.NaT,
+        'label': rows['title'].values,
+        'type': rows['category'].values,
+        'code': rows['codes'].values,
+        'format': rows['exam_format'].values,
+        'notes': rows['chart_note'].where(rows['chart_note'] != '', rows['summary']).values,
+        'date_text': [format_event_date(d, p) for d, p in zip(rows['date'], rows['precision'])],
+    })
+    out['description'] = (
+        'Codes: ' + out['code'] + '\n' + 'Format: ' + out['format'] + '\n' + 'Notes: ' + out['notes']
+    ).str.strip()
+    return out.reset_index(drop=True)
 
 
 @st.cache_data
 def _load_timeline_events(events_mtime=None) -> Optional[pd.DataFrame]:
     """
-    Load optional timeline events used to annotate time-series charts.
+    Load the events used to annotate time-series charts.
     Supported locations (in priority order):
-    - st.secrets['EVENTS_PATH'] or st.secrets['EVENTS_URL']
-    - ./data/timeline_events.csv  (preferred)
-    - ./timeline_events.csv       (legacy fallback)
+    - st.secrets['EVENTS_PATH'] or st.secrets['EVENTS_URL']  (legacy column layout)
+    - ./data/licensure_history.csv  (preferred: rows with on_chart = 1)
+    - ./data/timeline_events.csv or ./timeline_events.csv  (legacy fallback)
 
-    Expected columns (case-insensitive):
+    Legacy files use these columns (case-insensitive):
     - start_date (required)
     - end_date (optional)
     - label (short title shown on chart)
@@ -46,6 +72,15 @@ def _load_timeline_events(events_mtime=None) -> Optional[pd.DataFrame]:
             df = None
     except Exception:
         df = None
+
+    if df is None:
+        try:
+            history = read_history_csv()
+        except ValueError:
+            history = None
+        if history is not None:
+            events = history_to_chart_events(history)
+            return events if not events.empty else None
 
     if df is None:
         project_root = Path(__file__).resolve().parents[1]

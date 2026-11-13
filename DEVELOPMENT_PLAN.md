@@ -94,6 +94,28 @@ Dashboard:
 
 ---
 
+## Completed 2026-11-13 — History tab
+
+- New **History** tab: intro on what the S.E. title authority is, stat row from the license
+  numbering, an event-lane timeline over licenses issued per year (`plot_history_timeline`),
+  a kind-of-event filter, notes on reading the counts, a sourced chronology grouped by era,
+  and recollections from the EERI oral histories.
+- `data/licensure_history.csv` (37 events) is now the single source for history events. Rows with
+  `on_chart` = 1 feed the Time-tab overlays, so `data/timeline_events.csv`,
+  `data/timeline_events_extra.csv`, `data/License History Table.csv` and
+  `tools/reprocess_timeline.py` were retired. No build step.
+- Corrected in passing: NCEES Structural I / II date from fall 1985 / fall 1987 (the old table said
+  1997); the unsupported 1957 "separates CE and SE practice scopes" row and the unverifiable
+  per-cycle "exam references updated" rows were dropped.
+- Time-tab bar overlay draws one marker per bucket and lists every event in it (two events in one
+  year used to hide each other); event lines on the last chart use fixed per-category colors.
+- `dashboard_lib/history.py` (pure helpers) + `tests/test_history.py`, including guards on the
+  shipped CSV. Sources indexed in `research/SOURCES.md`; PDFs in `research/sources/` are gitignored.
+- Open questions are listed at the end of `research/SOURCES.md` (text of Chapter 254, Statutes of
+  1931; whether the first ~370 titles were granted without examination).
+
+---
+
 ## Still open
 
 - **P2 (verify on next run)** — none of the pipeline changes have run against a live DCA download or

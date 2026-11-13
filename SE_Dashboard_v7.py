@@ -57,9 +57,27 @@ from dashboard_lib.stats import (
     survival_at,
     median_survival,
 )
+from dashboard_lib.history import (
+    HISTORY_CATEGORIES,
+    ERAS,
+    history_path,
+    read_history_csv,
+    format_event_date,
+    plot_position,
+    era_index,
+    era_label,
+    lane_offsets,
+    fractional_year,
+    license_number_milestones,
+    early_record_coverage,
+    event_card_html,
+)
 from dashboard_lib.theme import (
     register_plotly_template,
     DASHBOARD_CSS,
+    HISTORY_CATEGORY_COLORS,
+    history_category_color,
+    INK as INK_TEXT,
     PRIMARY,
     ACCENT,
     SUCCESS,
@@ -239,7 +257,8 @@ def resolve_data_source(default_local_filename: str):
 
     for d in search_dirs:
         for csv_path in d.glob("*.csv"):
-            if csv_path.name.lower() in ['timeline_events.csv', 'license history table.csv']:
+            if csv_path.name.lower() in ['timeline_events.csv', 'license history table.csv',
+                                         'licensure_history.csv', 'timeline_events_extra.csv']:
                 continue
             try:
                 sample_df = pd.read_csv(csv_path, nrows=1)
@@ -440,7 +459,8 @@ def create_filters(df):
     filters['show_events'] = st.sidebar.checkbox(
         "Show timeline events",
         value=events_df_present,
-        help="Toggle overlays of exam/code history on charts (if available).",
+        help="Overlay key licensure, exam, code and earthquake dates on the Time-tab charts. "
+             "The History tab explains each one.",
         key='show_events_toggle',
     )
 
@@ -463,7 +483,7 @@ def create_filters(df):
     filters['statuses'] = _render_checkbox_filter("License Status", statuses, 'status_filter')
 
     if not events_df_present:
-        st.sidebar.caption("Add `timeline_events.csv` with columns: start_date, end_date (optional), label, description, type.")
+        st.sidebar.caption("Add `data/licensure_history.csv` (rows with `on_chart` = 1) to overlay history events on the charts.")
     return filters
 
 
@@ -529,7 +549,7 @@ def _render_count_bubble(count: int, total: int, label: str):
     )
 
 
-def create_visualizations(filtered_df, show_events: bool, start_year: Optional[int] = None, end_year: Optional[int] = None, comparison_state: str = None, full_df=None, status_agnostic_df=None):
+def create_visualizations(filtered_df, show_events: bool, start_year: Optional[int] = None, end_year: Optional[int] = None, comparison_state: str = None, full_df=None, status_agnostic_df=None, all_df=None):
     if filtered_df is None or filtered_df.empty:
         st.warning("No data to visualize with current filters.")
         return
@@ -543,11 +563,16 @@ def create_visualizations(filtered_df, show_events: bool, start_year: Optional[i
     has_geo = has_multi_state or has_ca_county
     has_status = 'License Status' in filtered_df.columns and filtered_df['License Status'].nunique() > 1
 
+    history_events, history_error = load_history()
+    has_history = history_error is not None or (history_events is not None and not history_events.empty)
+
     tab_labels = ["Time"]
     if has_geo:
         tab_labels.append("Geography")
     if has_status:
         tab_labels.append("Status")
+    if has_history:
+        tab_labels.append("History")
 
     st.markdown(
         '<h3 style="text-decoration:underline;margin-bottom:0.25rem;">Category of Visuals</h3>',
@@ -627,6 +652,12 @@ def create_visualizations(filtered_df, show_events: bool, start_year: Optional[i
     if has_status:
         with tabs[tab_labels.index("Status")]:
             plot_status_pie(filtered_df)
+
+    # ---------- History tab ----------
+    # Reference material: reads the whole dataset, not the sidebar-filtered one.
+    if has_history:
+        with tabs[tab_labels.index("History")]:
+            render_history_tab(all_df if all_df is not None else filtered_df, history_events, history_error)
 
 
 def _period_start(period) -> Optional[pd.Timestamp]:
@@ -829,31 +860,34 @@ def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_
             pad = max(1, y_max * 0.06)
             fig.update_yaxes(range=[-pad * 2.5, y_max * 1.05])
 
-            text_year = ev['start_date'].dt.year.astype('Int64').astype(str).fillna('')
-
-            ev_desc = render_event_descriptions(ev)
+            # Two events can land in one bucket (the 1933 earthquake and the Field
+            # Act, say). Stacked markers would hide all but one from the hover, so
+            # draw one marker per bucket and list every event in its tooltip.
+            ev = ev.sort_values('start_date')
+            ev['__desc'] = render_event_descriptions(ev)
+            ev['__when'] = _event_date_text(ev)
+            hover_by_bucket, year_by_bucket = {}, {}
+            for bucket, grp in ev.groupby('bucket', sort=False):
+                hover_by_bucket[bucket] = '<br><br>'.join(
+                    f"<b>{_sanitize_hover(r['label'])}</b><br>"
+                    f"{_sanitize_hover(r['__when'])} · {_sanitize_hover(r['type'])}<br>"
+                    f"{r['__desc']}"
+                    for _, r in grp.iterrows()
+                )
+                year_by_bucket[bucket] = str(grp['start_date'].iloc[0].year)
+            buckets = list(hover_by_bucket)
 
             fig.add_trace(go.Scatter(
-                x=ev['bucket'],
-                y=[-pad * 0.8] * len(ev),
+                x=buckets,
+                y=[-pad * 0.8] * len(buckets),
                 mode='markers+text',
                 name='Events',
                 marker=dict(symbol='triangle-up', size=10, color=EVENT_MARKER_COLOR),
-                text=text_year,
+                text=[year_by_bucket[b] for b in buckets],
                 textposition='bottom center',
                 textfont=dict(color=EVENT_MARKER_COLOR),
-                hovertemplate=(
-                    '<b>%{customdata[0]}</b><br>'
-                    'Date: %{customdata[1]}<br>'
-                    'Type: %{customdata[2]}<br>'
-                    '%{customdata[3]}<extra></extra>'
-                ),
-                customdata=pd.concat([
-                    ev['label'].fillna(''),
-                    ev['start_date'].dt.strftime('%Y-%m-%d'),
-                    ev['type'].astype(str),
-                    ev_desc,
-                ], axis=1).values,
+                hovertemplate='%{customdata}<extra></extra>',
+                customdata=[hover_by_bucket[b] for b in buckets],
             ))
 
     _show_chart(fig)
@@ -867,6 +901,16 @@ def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_
     items = _issuance_stat_items(filtered_df, start_year, end_year)
     if items:
         _render_stat_row(items)
+
+
+def _event_date_text(ev: pd.DataFrame) -> pd.Series:
+    """Display date per event: the history file's own wording when it has one
+    ('1931', 'April 1988'), else the ISO date (legacy event files)."""
+    iso = ev['start_date'].dt.strftime('%Y-%m-%d')
+    if 'date_text' not in ev.columns:
+        return iso
+    given = ev['date_text'].fillna('').astype(str)
+    return given.where(given != '', iso)
 
 
 def _detect_issue_date_anomalies(df_line: pd.DataFrame, license_col: str, window: int = 51, min_diff_years: float = 5.0) -> pd.DataFrame:
@@ -987,7 +1031,8 @@ def plot_time_series_line(filtered_df, lock_y: bool = True, events_df: Optional[
     if show_events and (events_df is not None) and (not events_df.empty):
         type_styles = {}
         for i, t in enumerate(events_df['type'].astype(str).unique()):
-            type_styles[t] = dict(color=EVENT_TYPE_PALETTE[i % len(EVENT_TYPE_PALETTE)], dash='dot')
+            fallback = EVENT_TYPE_PALETTE[i % len(EVENT_TYPE_PALETTE)]
+            type_styles[t] = dict(color=HISTORY_CATEGORY_COLORS.get(t, fallback), dash='dot')
 
         y_max = float(pd.Series(yvals).max()) if len(yvals) else 0.0
         y_min = float(pd.Series(yvals).min()) if len(yvals) else 0.0
@@ -1009,14 +1054,14 @@ def plot_time_series_line(filtered_df, lock_y: bool = True, events_df: Optional[
                 marker=dict(size=12, color='rgba(0,0,0,0)'),
                 hovertemplate=(
                     '<b>%{customdata[0]}</b><br>'
-                    'Date: %{x|%Y-%m-%d}<br>'
-                    'Type: %{customdata[1]}<br>'
+                    '%{customdata[3]} · %{customdata[1]}<br>'
                     '%{customdata[2]}<extra></extra>'
                 ),
                 customdata=pd.concat([
                     ev['label'].fillna(''),
                     ev['type'].astype(str),
                     ev_desc,
+                    _event_date_text(ev),
                 ], axis=1).values,
                 showlegend=False,
             ))
@@ -2015,6 +2060,340 @@ def _display_headline_stats(df):
 
 
 # ---------- App ----------
+# ---------- History tab ----------
+# Direct labels on neighbouring events alternate above/below their marker when
+# the events are closer together than this many years.
+HISTORY_LABEL_GAP_YEARS = 14
+HISTORY_FILTER_KEY = 'history_category_filter'
+_MS_PER_YEAR = 365.25 * 24 * 3600 * 1000
+
+HISTORY_INTRO = """
+In California, Structural Engineer is not a separate license. It is an authority to use a
+title, granted to someone who already holds a California Civil Engineer license, has at least
+three further years of structural work in responsible charge, and has passed a separate
+structural examination. State law reserves two kinds of buildings for structural engineers:
+public schools and hospitals. A civil engineer may design the structure of anything else.
+
+That arrangement dates from 1931 and has changed little since. What has changed is everything
+around it: the exam, the building code, and the earthquakes that tested both. This page sets
+those changes against the number of licenses issued each year.
+"""
+
+HISTORY_VOICES = """
+Recollections from two engineers who held the license, taken from the Earthquake Engineering
+Research Institute's oral history series.
+
+- **Henry Degenkolb** began practice in 1936 and was interviewed between 1984 and 1986. He sat
+  sixteen hours of open-book civil exam and sixteen more of structural. When California was
+  small, he recalled, references from engineers who knew the candidate counted for as much as
+  the exam. By the 1980s he had declined to vouch for people from his own office who were
+  licensed anyway.
+- Degenkolb argued that an engineer "shouldn't really get your structural license until you've
+  chased an earthquake." Reading damage reports, he said, was no substitute for seeing it.
+- On enforcement he was blunt. In November 1985 he described California's license as reputedly
+  the toughest in the country, but said the Board rarely disciplined engineers whose designs
+  had failed, and recounted a case against one firm that dragged on for years before settling.
+- **Nicholas Forell** came to San Francisco from firms where, around 1950, engineers saw no
+  need for a license at all. He earned his structural license in 1958 and only then joined the
+  structural engineers association, having wrongly assumed that membership required it.
+"""
+
+HISTORY_ABOUT = """
+Compiled in November 2026 from the Board's sunset review reports, legislative background
+papers, the national examining council's published history, SEAOC and SEAONC histories, state
+statutes, Robert Olson's study of the Field Act, STRUCTURE magazine, and two EERI oral
+histories. Each entry lists its sources. Where a statement rests on inference from the license
+numbers rather than on a document, the entry says so.
+
+The events are kept in `data/licensure_history.csv`. Corrections and additions are welcome.
+"""
+
+
+@st.cache_data
+def _load_history_cached(file_mtime=None):
+    """(events, error message). Keyed on the CSV's mtime so hand edits show up on rerun."""
+    try:
+        return read_history_csv(), None
+    except ValueError as exc:
+        return None, str(exc)
+
+
+def load_history():
+    path = history_path()
+    return _load_history_cached(file_mtime=path.stat().st_mtime if path.exists() else None)
+
+
+def _hover_lines(text: str, width: int = 62) -> str:
+    """Wrap prose for a Plotly tooltip, which does not wrap on its own."""
+    lines = _wrap_words(str(text).split(), width=width, first_prefix='', subsequent_prefix='')
+    return '<br>'.join(_sanitize_hover(line) for line in lines)
+
+
+def _history_label_positions(xs, labels, offsets) -> list:
+    """Text position per marker.
+
+    A marker nudged off its lane's centerline has a neighbour on the other side,
+    so its label goes on the outside (below a lowered marker, above a raised one).
+    Centered markers alternate above and below when labelled neighbours are closer
+    than HISTORY_LABEL_GAP_YEARS.
+    """
+    positions = []
+    last_year, last_pos = None, 'bottom center'
+    for x, label, offset in zip(xs, labels, offsets):
+        if not label:
+            positions.append('top center')
+            continue
+        year = fractional_year(x)
+        if offset < 0:
+            pos = 'bottom center'
+        elif offset > 0:
+            pos = 'top center'
+        else:
+            crowded = last_year is not None and (year - last_year) < HISTORY_LABEL_GAP_YEARS
+            pos = ('bottom center' if last_pos == 'top center' else 'top center') if crowded else 'top center'
+        positions.append(pos)
+        last_year, last_pos = year, pos
+    return positions
+
+
+def plot_history_timeline(events: pd.DataFrame, df: Optional[pd.DataFrame]):
+    """Event lanes above licenses issued per year, on one shared time axis.
+
+    Two stacked panels rather than one chart with two y-scales: the lanes carry
+    identity (what kind of event) and the bars carry magnitude (licenses issued).
+    Each lane is named on its axis, so the lane colors are a second cue, not the
+    only one.
+    """
+    from plotly.subplots import make_subplots
+
+    lanes = [c for c in HISTORY_CATEGORIES if (events['category'] == c).any()]
+    if not lanes:
+        st.info("Pick at least one kind of event to draw the timeline.")
+        return
+
+    has_counts = (
+        df is not None and 'Original Issue Date' in df.columns
+        and pd.api.types.is_datetime64_any_dtype(df['Original Issue Date'])
+    )
+    now = pd.Timestamp.now()
+
+    if has_counts:
+        fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.035,
+                            row_heights=[0.6, 0.4])
+    else:
+        fig = make_subplots(rows=1, cols=1)
+
+    lane_y = {c: len(lanes) - 1 - i for i, c in enumerate(lanes)}  # first category on top
+    guide_xs = []
+    for category in lanes:
+        grp = events[events['category'] == category].sort_values('date')
+        xs = [plot_position(d, prec) for d, prec in zip(grp['date'], grp['precision'])]
+        offsets = lane_offsets([fractional_year(x) for x in xs])
+        labels = grp['chart_label'].tolist()
+        guide_xs += [x for x, label in zip(xs, labels) if label]
+        fig.add_trace(go.Scatter(
+            x=xs,
+            y=[lane_y[category] + o for o in offsets],
+            mode='markers+text',
+            name=category,
+            # White ring keeps neighbouring markers readable where they touch.
+            marker=dict(size=11, color=history_category_color(category), line=dict(color='white', width=2)),
+            text=labels,
+            textposition=_history_label_positions(xs, labels, offsets),
+            textfont=dict(size=11, color=NEUTRAL),
+            cliponaxis=False,
+            customdata=[
+                [_sanitize_hover(title), format_event_date(d, prec), category, _hover_lines(note or summary)]
+                for title, d, prec, note, summary in zip(
+                    grp['title'], grp['date'], grp['precision'], grp['chart_note'], grp['summary'])
+            ],
+            hovertemplate=(
+                '<b>%{customdata[0]}</b><br>'
+                '%{customdata[1]} · %{customdata[2]}<br>'
+                '%{customdata[3]}<extra></extra>'
+            ),
+            showlegend=False,
+        ), row=1, col=1)
+
+    fig.update_yaxes(
+        tickmode='array',
+        tickvals=[lane_y[c] for c in lanes],
+        ticktext=lanes,
+        range=[-0.7, len(lanes) - 0.3],
+        ticks='',
+        tickfont=dict(size=12, color=INK_TEXT),
+        fixedrange=True,
+        row=1, col=1,
+    )
+
+    if has_counts:
+        counts = issued_per_year(df)
+        counts = counts[counts.index <= now.year]
+        years = [int(y) for y in counts.index]
+        is_partial = [y == now.year for y in years]
+        fig.add_trace(go.Bar(
+            x=[pd.Timestamp(year=y, month=7, day=1) for y in years],
+            y=counts.values,
+            width=[0.82 * _MS_PER_YEAR] * len(years),
+            name='Licenses issued',
+            marker=_partial_bar_marker(MAIN_BAR_COLOR, is_partial),
+            customdata=[[y, ' (year to date)' if part else ''] for y, part in zip(years, is_partial)],
+            hovertemplate='<b>%{customdata[0]}</b><br>%{y} licenses issued%{customdata[1]}<extra></extra>',
+            showlegend=False,
+        ), row=2, col=1)
+        fig.update_yaxes(title_text='Licenses issued', fixedrange=True, row=2, col=1)
+
+    # Faint guides from each labelled event down through the bars, so an event can
+    # be read against the licensing level of its year.
+    for x in guide_xs:
+        fig.add_shape(type='line', x0=x, x1=x, xref='x', yref='paper', y0=0, y1=1,
+                      line=dict(color=BORDER, width=1), layer='below')
+
+    first_year = min(int(events['year'].min()), 1931) - 3
+    fig.update_xaxes(
+        range=[pd.Timestamp(year=first_year, month=1, day=1), pd.Timestamp(year=now.year + 3, month=1, day=1)],
+        tick0='1900-01-01', dtick='M120', tickformat='%Y',
+    )
+    fig.update_layout(
+        height=580 if has_counts else 340,
+        hovermode='closest',
+        dragmode='zoom',
+        bargap=0,
+        margin=dict(l=24, r=24, t=28, b=40),
+    )
+    _show_chart(fig)
+
+
+def _history_stat_items(df: Optional[pd.DataFrame]) -> list:
+    """Stat cards read off the license numbers: how fast the title has been granted."""
+    milestones = license_number_milestones(df, step=1000) if df is not None else []
+    if len(milestones) < 3:
+        return []
+    by_number = dict(milestones)
+    first_number, first_date = milestones[0]
+    top_number = int(pd.to_numeric(df['License Number'], errors='coerce').max())
+    thousands = sorted(n for n in by_number if n % 1000 == 0)
+
+    items = [
+        dict(label="First title issued", value=f"{first_date.strftime('%b')} {first_date.day}, {first_date.year}",
+             help=f"Issue date of license No. {first_number}, the lowest number in the data."),
+        dict(label="Titles numbered to date", value=f"{top_number:,}",
+             help="Highest license number in the data. Numbers are issued in sequence, so this is "
+                  "close to the count of structural titles ever granted, including those long lapsed."),
+    ]
+    if 1000 in by_number:
+        years = (by_number[1000] - first_date).days / 365.25
+        items.append(dict(
+            label="First 1,000 titles took", value=f"{years:.0f} years",
+            help=f"No. {first_number} ({first_date.year}) to No. 1,000 ({by_number[1000].year}).",
+        ))
+    if len(thousands) >= 2:
+        prev_n, last_n = thousands[-2], thousands[-1]
+        years = (by_number[last_n] - by_number[prev_n]).days / 365.25
+        items.append(dict(
+            label="Latest 1,000 titles took", value=f"{years:.0f} years",
+            help=f"No. {prev_n:,} ({by_number[prev_n].year}) to No. {last_n:,} ({by_number[last_n].year}).",
+        ))
+    return items
+
+
+def _history_data_notes(df: Optional[pd.DataFrame]) -> str:
+    """Markdown bullets on how to read the license counts against the history."""
+    notes = []
+    coverage = early_record_coverage(df, before_year=1940) if df is not None else None
+    if coverage:
+        present, numbered = coverage
+        notes.append(
+            f"- **The earliest years are undercounted.** Only {present:,} of roughly {numbered:,} licenses "
+            "numbered before 1940 appear in the public data, because the state's feed drops licenses "
+            "that lapsed long ago. License numbers are issued in sequence, so the numbering is the "
+            "better guide to how many titles were granted in the 1930s and 1940s. From the 1950s on "
+            "the records are nearly complete."
+        )
+    notes.append(
+        "- **Licenses arrive in batches, and the batch month has moved.** For most of the license's "
+        "history, nearly all of a year's structural licenses were issued within a few days of exam "
+        "results. The main batch came in December through 1978 and in January to March from 1980, "
+        "with second batches late in 1988, 1990 and 1991 as the exam calendar shifted. That is why "
+        "1979, 1989 and 1992 look almost empty on the Time tab. The batch fell just outside the "
+        "calendar year; licensing did not stop."
+    )
+    notes.append(
+        "- **Two drops are real, and both follow an exam change.** Only 26 licenses were issued in "
+        "February 1985, the first results after grading on a curve ended. New licenses then fell by "
+        "about half in 2024 and 2025, the first two years of the computer-based exam."
+    )
+    notes.append(
+        "- **Some issue dates are not original.** A number of licenses carry an issue date years "
+        "later than their license number implies, usually the date of a reinstatement or a "
+        "reciprocity grant. The last chart on the Time tab flags them."
+    )
+    return "\n".join(notes)
+
+
+def render_history_tab(all_df: Optional[pd.DataFrame], events: Optional[pd.DataFrame], error: Optional[str]):
+    """History tab: what the license is, a timeline against licenses issued, and
+    a sourced entry for every event. Uses the whole dataset, not the sidebar filters."""
+    if error:
+        st.warning(f"The licensure history file could not be read: {error}")
+        return
+    if events is None or events.empty:
+        st.info("No licensure history events found in `data/licensure_history.csv`.")
+        return
+
+    st.subheader("How the Structural Engineer license came to be")
+    st.markdown(HISTORY_INTRO)
+
+    stat_items = _history_stat_items(all_df)
+    if stat_items:
+        _render_stat_row(stat_items)
+
+    st.subheader("Timeline: events and licenses issued")
+    present = [c for c in HISTORY_CATEGORIES if (events['category'] == c).any()]
+    selected = st.pills(
+        "Kinds of event",
+        present,
+        selection_mode="multi",
+        default=present,
+        key=HISTORY_FILTER_KEY,
+        help="Filters both the timeline and the entries below it.",
+    )
+    shown = events[events['category'].isin(selected or [])]
+
+    plot_history_timeline(shown, all_df)
+    st.caption(
+        "Each dot is an event, in a lane for its kind. Hover a dot for a one-line summary; the full "
+        "entries are below. Bars count licenses by Original Issue Date across the whole dataset and "
+        f"ignore the sidebar filters. The lightly shaded {pd.Timestamp.now().year} bar is year to date."
+    )
+
+    st.subheader("Reading the license counts against this history")
+    st.markdown(_history_data_notes(all_df))
+
+    st.subheader("Chronology")
+    if shown.empty:
+        st.info("Pick at least one kind of event above to list the entries.")
+    for i, (_start, _end, _title, blurb) in enumerate(ERAS):
+        era_events = shown[shown['year'].map(era_index) == i]
+        if era_events.empty:
+            continue
+        cards = ''.join(
+            event_card_html(row, history_category_color(row['category']))
+            for row in era_events.to_dict('records')
+        )
+        st.markdown(
+            f'<div class="hist-era"><h3>{html.escape(era_label(i))}</h3>'
+            f'<p class="hist-era-blurb">{html.escape(blurb)}</p></div>{cards}',
+            unsafe_allow_html=True,
+        )
+
+    st.subheader("From the oral histories")
+    st.markdown(HISTORY_VOICES)
+
+    with st.expander("About this history"):
+        st.markdown(HISTORY_ABOUT)
+
+
 def main():
     st.set_page_config(
         page_title="CA SE License Statistics",
@@ -2151,6 +2530,7 @@ def main():
         filters.get('comparison_state'),
         full_df,
         status_agnostic_df,
+        all_df=df,
     )
 
 
