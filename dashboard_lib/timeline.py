@@ -7,8 +7,22 @@ import pandas as pd
 import streamlit as st
 
 
-@st.cache_data
+def _local_events_mtime() -> Optional[float]:
+    root = Path(__file__).resolve().parents[1]
+    for candidate in (root / 'data' / 'timeline_events.csv', root / 'timeline_events.csv'):
+        if candidate.exists():
+            return candidate.stat().st_mtime
+    return None
+
+
 def load_timeline_events() -> Optional[pd.DataFrame]:
+    """Cached loader keyed on the local CSV's mtime, so edits to
+    timeline_events.csv show up without restarting the app."""
+    return _load_timeline_events(events_mtime=_local_events_mtime())
+
+
+@st.cache_data
+def _load_timeline_events(events_mtime=None) -> Optional[pd.DataFrame]:
     """
     Load optional timeline events used to annotate time-series charts.
     Supported locations (in priority order):

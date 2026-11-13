@@ -223,7 +223,7 @@ class TestRenderFilterChips:
         'License Status': ['Active', 'Retired'],
     })
     BASE = {
-        'states': [], 'statuses': [], 'start_year': None,
+        'states': None, 'statuses': None, 'start_year': None,
         'end_year': None, 'comparison_state': None,
     }
 
@@ -240,7 +240,35 @@ class TestRenderFilterChips:
     def test_renders_with_no_filters(self):
         assert 'No filters applied' in self._render()
 
+    def test_empty_selection_shows_none_chip(self):
+        out = self._render(states=[])
+        assert 'States' in out and 'None' in out
+
     def test_escapes_chip_values(self):
         out = self._render(comparison_state='<script>alert(1)</script>')
         assert '&lt;script&gt;' in out
         assert '<script>' not in out
+
+
+class TestApplyFilters:
+    DF = pd.DataFrame({
+        'State': ['CA', 'NV', 'CA'],
+        'License Status': ['Active', 'Retired', 'Retired'],
+        'Original Issue Date': pd.to_datetime(['2000-01-01', '2001-01-01', '2002-01-01']),
+    })
+    BASE = {'start_year': 1990, 'end_year': 2030}
+
+    def test_none_means_unfiltered(self):
+        from SE_Dashboard_v7 import apply_filters
+        out = apply_filters(self.DF, {**self.BASE, 'states': None, 'statuses': None})
+        assert len(out) == 3
+
+    def test_empty_selection_means_no_rows(self):
+        from SE_Dashboard_v7 import apply_filters
+        out = apply_filters(self.DF, {**self.BASE, 'states': [], 'statuses': None})
+        assert out.empty
+
+    def test_selection_filters(self):
+        from SE_Dashboard_v7 import apply_filters
+        out = apply_filters(self.DF, {**self.BASE, 'states': ['CA'], 'statuses': ['Retired']})
+        assert len(out) == 1

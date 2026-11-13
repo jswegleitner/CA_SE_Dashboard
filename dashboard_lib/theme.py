@@ -93,6 +93,13 @@ def register_plotly_template():
             tickcolor=BORDER,
             tickfont=dict(color=NEUTRAL, size=12),
             title=dict(font=dict(color=NEUTRAL, size=12)),
+            # Thin guide line from the hovered point down to the axis.
+            showspikes=True,
+            spikemode='across',
+            spikesnap='data',
+            spikethickness=1,
+            spikedash='dot',
+            spikecolor='#94A3B8',
         ),
         yaxis=dict(
             showgrid=True,
@@ -112,12 +119,17 @@ def register_plotly_template():
             borderwidth=1,
         ),
         margin=dict(l=56, r=24, t=56, b=48),
+        # Light, compact tooltips that read as part of the page rather than a
+        # dark slab dropped on top of the data. namelength=-1 stops trace
+        # names being truncated to 15 chars with an ellipsis.
         hoverlabel=dict(
-            font=dict(family=FONT_FAMILY, size=12, color='white'),
-            bgcolor=INK,
-            bordercolor=INK,
+            font=dict(family=FONT_FAMILY, size=12, color=INK),
+            bgcolor='rgba(255,255,255,0.96)',
+            bordercolor=BORDER,
             align='left',
+            namelength=-1,
         ),
+        hoverdistance=30,
         geo=dict(
             bgcolor='white',
             lakecolor='white',

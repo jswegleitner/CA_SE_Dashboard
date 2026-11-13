@@ -123,3 +123,65 @@ class TestStatusColors:
 
     def test_unknown_status_deterministic(self):
         assert status_color('Suspended') == status_color('Suspended')
+
+
+# ---------- cohort retention / survival / per-capita helpers ----------
+
+from dashboard_lib.stats import (  # noqa: E402
+    active_counts_by_year,
+    retention_by_decade,
+    kaplan_meier,
+    license_survival,
+    survival_at,
+    median_survival,
+)
+
+
+def _lic(issue, exp, status):
+    return pd.DataFrame({
+        'Original Issue Date': pd.to_datetime(issue),
+        'Expiration Date': pd.to_datetime(exp),
+        'License Status': status,
+    })
+
+
+class TestActiveCountsByYear:
+    def test_window_rule(self):
+        df = _lic(['2000-06-01', '2005-01-01'], ['2004-03-31', '2030-01-01'], ['Retired', 'Active'])
+        out = active_counts_by_year(df, [1999, 2000, 2004, 2005])
+        assert out.tolist() == [0, 1, 1, 1]
+
+
+class TestRetentionByDecade:
+    def test_share_active_per_decade(self):
+        df = _lic(['1981-01-01', '1985-01-01', '1992-01-01'],
+                  ['2027-01-01', '2001-01-01', '2027-01-01'],
+                  ['Active', 'Retired', 'Active'])
+        out = retention_by_decade(df).set_index('decade')
+        assert out.loc[1980, 'issued'] == 2 and out.loc[1980, 'active'] == 1
+        assert out.loc[1980, 'pct_active'] == 50
+        assert out.loc[1990, 'label'] == '1990s'
+
+
+class TestKaplanMeier:
+    def test_textbook_example(self):
+        # times 1,2,3(censored),4 ; events at 1,2,4
+        s = kaplan_meier(pd.Series([1, 2, 3, 4]), pd.Series([True, True, False, True]))
+        assert s[0.0] == 1.0
+        assert s[1] == pytest.approx(0.75)
+        assert s[2] == pytest.approx(0.5)
+        assert s[3] == pytest.approx(0.5)      # censoring doesn't drop the curve
+        assert s[4] == pytest.approx(0.0)
+
+    def test_helpers(self):
+        s = kaplan_meier(pd.Series([1, 2, 3, 4]), pd.Series([True, True, False, True]))
+        assert survival_at(s, 2.5) == pytest.approx(0.5)
+        assert survival_at(s, 10) is None
+        assert median_survival(s) == 2
+
+    def test_license_survival_censors_active(self):
+        asof = pd.Timestamp('2025-01-01')
+        df = _lic(['2000-01-01', '2000-01-01'], ['2010-01-01', '2027-01-01'], ['Retired', 'Active'])
+        s = license_survival(df, asof)
+        assert survival_at(s, 9) == 1.0
+        assert survival_at(s, 11) == pytest.approx(0.5)

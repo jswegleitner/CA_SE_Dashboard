@@ -51,6 +51,11 @@ from dashboard_lib.stats import (
     active_on,
     years_licensed,
     tenure_histogram,
+    active_counts_by_year,
+    retention_by_decade,
+    license_survival,
+    survival_at,
+    median_survival,
 )
 from dashboard_lib.theme import (
     register_plotly_template,
@@ -91,6 +96,22 @@ BAR_LABEL_MAX_CATEGORIES = 25
 _US_TERRITORIES = {'PR', 'GU', 'VI', 'AS', 'MP', 'AP', 'AA', 'AE'}
 
 
+# Plotly config shared by every chart.
+# - scrollZoom False: the maps (geo traces) otherwise grab the mouse wheel, so
+#   scrolling the page stalls whenever the pointer passes over one.
+# - Modebar only on hover, without the select/lasso tools nobody uses here.
+CHART_CONFIG = {
+    'scrollZoom': False,
+    'displaylogo': False,
+    'displayModeBar': 'hover',
+    'modeBarButtonsToRemove': ['lasso2d', 'select2d', 'autoScale2d', 'toggleSpikelines'],
+}
+
+
+def _show_chart(fig):
+    st.plotly_chart(fig, use_container_width=True, config=CHART_CONFIG)
+
+
 # ---------- Data loading ----------
 def _file_hash(src):
     """Return file modification time as a cache-busting key, or None for URLs."""
@@ -101,15 +122,22 @@ def _file_hash(src):
 
 
 @st.cache_data(ttl=3600)
+def _read_csv_cached(src, file_mtime=None):
+    # `file_mtime` must NOT start with an underscore: Streamlit leaves
+    # underscore-prefixed arguments out of the cache key, so the old
+    # `_file_mtime` never actually busted the cache. Exceptions propagate
+    # (and are not cached), so a transient failure isn't pinned for an hour.
+    return pd.read_csv(src)
+
+
 def load_cleaned_data(src, _file_mtime=None):
     """
     Load pre-cleaned CSV data with caching for better performance.
     `src` can be a local path or a URL.
-    `_file_mtime` is used only to bust the cache when the file changes on disk.
+    `_file_mtime` busts the cache when the file changes on disk.
     """
     try:
-        df = pd.read_csv(src)
-        return df
+        return _read_csv_cached(src, file_mtime=_file_mtime)
     except Exception as e:
         st.error(f"Error loading data from {src}: {str(e)}")
         return None
@@ -314,16 +342,17 @@ def _render_filter_chips(filters: dict, df: pd.DataFrame, container=None):
 
     chips = []
 
-    selected_states = filters.get('states') or []
-    if selected_states and set(selected_states) != set(all_states):
-        preview = ", ".join(selected_states[:3])
+    # None = not filtered; [] = everything unticked (shows zero rows).
+    selected_states = filters.get('states')
+    if selected_states is not None and set(selected_states) != set(all_states):
+        preview = ", ".join(selected_states[:3]) or "None"
         if len(selected_states) > 3:
             preview += f" +{len(selected_states) - 3} more"
         chips.append(("States", preview))
 
-    selected_statuses = filters.get('statuses') or []
-    if selected_statuses and set(selected_statuses) != set(all_statuses):
-        chips.append(("Status", ", ".join(selected_statuses)))
+    selected_statuses = filters.get('statuses')
+    if selected_statuses is not None and set(selected_statuses) != set(all_statuses):
+        chips.append(("Status", ", ".join(selected_statuses) or "None"))
 
     sy, ey = filters.get('start_year'), filters.get('end_year')
     if sy is not None and ey is not None and (sy != full_min or ey != full_max):
@@ -444,10 +473,12 @@ def apply_filters(df, filters):
 
     filtered_df = df.copy()
 
-    if 'State' in filtered_df.columns and filters['states']:
+    # None means "don't filter on this". A list, even an empty one, is an
+    # explicit selection: unticking every box must show zero rows, not all.
+    if 'State' in filtered_df.columns and filters.get('states') is not None:
         filtered_df = filtered_df[filtered_df['State'].isin(filters['states'])]
 
-    if 'License Status' in filtered_df.columns and filters['statuses']:
+    if 'License Status' in filtered_df.columns and filters.get('statuses') is not None:
         filtered_df = filtered_df[filtered_df['License Status'].isin(filters['statuses'])]
 
     if 'Original Issue Date' in filtered_df.columns and pd.api.types.is_datetime64_any_dtype(filtered_df['Original Issue Date']):
@@ -541,8 +572,11 @@ def create_visualizations(filtered_df, show_events: bool, start_year: Optional[i
         active_df = status_agnostic_df if status_agnostic_df is not None else filtered_df
         plot_issued_vs_departed(active_df, start_year=start_year, end_year=end_year)
         plot_active_licenses_per_year(active_df, start_year=start_year, end_year=end_year)
+        plot_active_per_capita(active_df, start_year=start_year, end_year=end_year)
         plot_avg_license_age_per_year(active_df, start_year=start_year, end_year=end_year)
         plot_years_licensed(active_df)
+        plot_retention_by_decade(active_df)
+        plot_license_survival(active_df)
         st.subheader("Licenses Issued Over Time")
         plot_time_series_line(filtered_df, lock_y, events_df=events_df, show_events=show_events, start_year=start_year, end_year=end_year)
 
@@ -765,7 +799,7 @@ def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_
         yaxis_title="Number of Licenses",
         showlegend=True if (comparison_state and comparison_state != 'None') else False,
         height=460,
-        hovermode='x unified',
+        hovermode='closest',
         dragmode='zoom',
         barmode='group',
         bargap=0.18,
@@ -822,7 +856,7 @@ def plot_time_series(filtered_df, bucket_size: str, lock_y: bool = True, events_
                 ], axis=1).values,
             ))
 
-    st.plotly_chart(fig, use_container_width=True)
+    _show_chart(fig)
 
     if any(is_partial):
         st.caption(
@@ -894,7 +928,8 @@ def plot_time_series_line(filtered_df, lock_y: bool = True, events_df: Optional[
         y_label = 'Cumulative Index'
 
     fig = go.Figure()
-    fig.add_trace(go.Scatter(
+    # Scattergl (WebGL): ~7k points zoom and pan much more smoothly than SVG.
+    fig.add_trace(go.Scattergl(
         x=df_line['Original Issue Date'],
         y=yvals,
         mode='lines+markers',
@@ -934,7 +969,7 @@ def plot_time_series_line(filtered_df, lock_y: bool = True, events_df: Optional[
         xaxis_title="Original Issue Date",
         yaxis_title=y_label,
         height=400,
-        hovermode='x unified',
+        hovermode='closest',
         dragmode='zoom',
     )
 
@@ -1008,7 +1043,7 @@ def plot_time_series_line(filtered_df, lock_y: bool = True, events_df: Optional[
             "date overwrote the original issuance. Hover a marker for details."
         )
 
-    st.plotly_chart(fig, use_container_width=True)
+    _show_chart(fig)
 
 
 def plot_state_counts(filtered_df):
@@ -1038,7 +1073,7 @@ def plot_state_counts(filtered_df):
             bargap=0.18,
         )
 
-        st.plotly_chart(fig, use_container_width=True)
+        _show_chart(fig)
 
     with col2:
         st.markdown("**Top 5 States**")
@@ -1095,7 +1130,7 @@ def plot_status_pie(filtered_df):
             )],
         )
 
-        st.plotly_chart(fig, use_container_width=True)
+        _show_chart(fig)
 
     with c2:
         st.markdown("**Status Breakdown**")
@@ -1164,7 +1199,7 @@ def plot_us_map(filtered_df):
         margin=dict(l=0, r=0, t=20, b=0),
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    _show_chart(fig)
 
     if unmapped:
         st.caption(f"Unmapped state values (not shown on map): {', '.join(unmapped)}")
@@ -1177,13 +1212,40 @@ TOTAL_LABEL = "Total licenses"
 
 
 @st.cache_data(ttl=86400)
+def _read_county_population(file_mtime=None) -> pd.Series:
+    pop = pd.read_csv(COUNTY_POPULATION_FILE, dtype={'FIPS': str})
+    return pop.set_index('FIPS')['Population']
+
+
 def load_county_population(_file_mtime=None) -> Optional[pd.Series]:
     """Population by 5-digit county FIPS code, or None if the reference file is missing."""
     try:
-        pop = pd.read_csv(COUNTY_POPULATION_FILE, dtype={'FIPS': str})
-        return pop.set_index('FIPS')['Population']
+        return _read_county_population(file_mtime=_file_mtime)
     except Exception:
         return None
+
+
+CA_COUNTIES_GEOJSON_FILE = Path(__file__).resolve().parent / 'data' / 'ca_counties.geojson'
+_US_COUNTIES_GEOJSON_URL = 'https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json'
+
+
+@st.cache_data
+def _read_ca_counties_geojson(file_mtime=None) -> dict:
+    import json
+    with open(CA_COUNTIES_GEOJSON_FILE, encoding='utf-8') as f:
+        return json.load(f)
+
+
+def load_ca_counties_geojson():
+    """California county shapes (58 features, ~70 KB) shipped in data/.
+
+    Falls back to Plotly's full US-counties URL if the local file is missing,
+    which makes the browser fetch ~3 MB from GitHub on every view.
+    """
+    try:
+        return _read_ca_counties_geojson(file_mtime=_file_hash(CA_COUNTIES_GEOJSON_FILE))
+    except Exception:
+        return _US_COUNTIES_GEOJSON_URL
 
 
 def plot_ca_county_map(filtered_df, per_capita: bool = False):
@@ -1237,7 +1299,7 @@ def plot_ca_county_map(filtered_df, per_capita: bool = False):
         locations=fips,
         z=values,
         locationmode='geojson-id',
-        geojson='https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json',
+        geojson=load_ca_counties_geojson(),
         colorscale=RED_SCALE,
         zmin=0,
         zmax=max(finite) or 1,
@@ -1259,7 +1321,7 @@ def plot_ca_county_map(filtered_df, per_capita: bool = False):
         margin=dict(l=0, r=0, t=20, b=0),
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    _show_chart(fig)
 
     if per_capita:
         st.caption(
@@ -1350,7 +1412,7 @@ def plot_issued_vs_departed(filtered_df, start_year=None, end_year=None):
     )
     fig.update_yaxes(zeroline=True, zerolinecolor=MUTED, zerolinewidth=1.5)
 
-    st.plotly_chart(fig, use_container_width=True)
+    _show_chart(fig)
 
     if any(is_prov):
         st.caption(
@@ -1434,10 +1496,10 @@ def plot_active_licenses_per_year(filtered_df, start_year=None, end_year=None):
         xaxis_title="Year",
         yaxis_title="Active Licenses",
         height=440,
-        hovermode='x unified',
+        hovermode='x',
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    _show_chart(fig)
 
     by_year = dict(zip(years, active_counts))
     latest_year = years[-1]
@@ -1463,6 +1525,171 @@ def plot_active_licenses_per_year(filtered_df, start_year=None, end_year=None):
         help="Year with the most licenses in force in the selected range.",
     ))
     _render_stat_row(items)
+
+
+# ---------- Active licenses per capita ----------
+
+CA_POPULATION_FILE = Path(__file__).resolve().parent / 'data' / 'ca_population_annual.csv'
+CA_POPULATION_SOURCE = "U.S. Census Bureau via FRED (series CAPOP)"
+
+
+@st.cache_data(ttl=86400)
+def _read_ca_population(file_mtime=None) -> pd.Series:
+    pop = pd.read_csv(CA_POPULATION_FILE)
+    return pop.set_index('Year')['Population']
+
+
+def load_ca_population() -> Optional[pd.Series]:
+    """California resident population by year, or None if the file is missing."""
+    try:
+        return _read_ca_population(file_mtime=_file_hash(CA_POPULATION_FILE))
+    except Exception:
+        return None
+
+
+def plot_active_per_capita(filtered_df, start_year=None, end_year=None):
+    """Active California-resident licenses per 100k Californians, by year."""
+    if 'State' not in filtered_df.columns:
+        return
+    ca = filtered_df[filtered_df['State'] == 'CA']
+    population = load_ca_population()
+    if ca.empty or population is None:
+        return
+    if not (pd.api.types.is_datetime64_any_dtype(ca['Original Issue Date'])
+            and pd.api.types.is_datetime64_any_dtype(ca['Expiration Date'])):
+        return
+
+    st.subheader("Active California Licenses per 100,000 Californians")
+    st.caption(
+        "Licenses held by California residents and active during each year, divided by the "
+        f"state's population ({CA_POPULATION_SOURCE}). Shows whether the supply of structural "
+        "engineers is keeping pace with the population. Same active-license rule and the same "
+        "status-filter exception as the chart above. Population figures stop at the latest "
+        "published year."
+    )
+
+    first = int(ca['Original Issue Date'].dt.year.min()) if start_year is None else int(start_year)
+    last = int(pd.Timestamp.now().year) if end_year is None else min(int(end_year), pd.Timestamp.now().year)
+    years = [y for y in range(first, last + 1) if y in population.index]
+    if not years:
+        st.info("No population data for the selected years.")
+        return
+
+    active = active_counts_by_year(ca, years)
+    rate = active / population.reindex(years).astype(float) * 100_000
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=years, y=rate.round(2).tolist(),
+        mode='lines+markers',
+        name='Per 100k residents',
+        line=dict(color=PRIMARY, width=2.5),
+        marker=dict(size=5, color=PRIMARY),
+        customdata=list(zip(active.tolist(), population.reindex(years).tolist())),
+        hovertemplate=(
+            '<b>%{x}</b><br>%{y:.1f} per 100k residents<br>'
+            'Active CA licenses: %{customdata[0]:,}<br>Population: %{customdata[1]:,.0f}<extra></extra>'
+        ),
+    ))
+    fig.update_layout(xaxis_title="Year", yaxis_title="Active licenses per 100k", height=420,
+                      hovermode='x', yaxis=dict(rangemode='tozero'))
+    _show_chart(fig)
+
+    latest = years[-1]
+    items = [dict(label=f"Per 100k in {latest}", value=f"{rate[latest]:.1f}",
+                  help=f"{int(active[latest]):,} active CA licenses, population "
+                       f"{population[latest]:,.0f}.")]
+    for span in (10, 25):
+        then = latest - span
+        if then in rate.index and rate[then]:
+            items.append(dict(label=f"Change Since {then}",
+                              value=f"{(rate[latest] - rate[then]) / rate[then] * 100:+.0f}%",
+                              help=f"{rate[then]:.1f} per 100k in {then}."))
+    peak = int(rate.idxmax())
+    items.append(dict(label="Peak Year", value=f"{peak} ({rate[peak]:.1f})"))
+    _render_stat_row(items)
+
+
+# ---------- Cohort retention & survival ----------
+
+def plot_retention_by_decade(filtered_df):
+    """Share of each issuance decade's licenses that are still Active today."""
+    if 'License Status' not in filtered_df.columns or not pd.api.types.is_datetime64_any_dtype(filtered_df['Original Issue Date']):
+        return
+    table = retention_by_decade(filtered_df)
+    if table.empty:
+        return
+
+    st.subheader("Share of Each Decade's Licenses Still Active Today")
+    st.caption(
+        "For licenses first issued in each decade: the percentage with status Active today. "
+        "Follows the State and date-range filters but ignores the License Status filter. "
+        "DCA's public data may no longer list some long-gone licenses, which would make the "
+        "oldest decades look better than they really were."
+    )
+
+    fig = go.Figure(go.Bar(
+        x=table['label'], y=table['pct_active'].round(1),
+        marker_color=SUCCESS,
+        text=[f"{p:.0f}%" for p in table['pct_active']],
+        textposition='outside',
+        customdata=table[['active', 'issued']].values,
+        hovertemplate='<b>%{x}</b><br>%{y:.1f}% still active<br>'
+                      '%{customdata[0]:,} of %{customdata[1]:,} licenses<extra></extra>',
+    ))
+    fig.update_layout(xaxis_title="Decade first issued", yaxis_title="% still Active",
+                      yaxis=dict(range=[0, 110], ticksuffix='%'), height=420, showlegend=False)
+    _show_chart(fig)
+
+    items = []
+    for _, row in table[table['decade'].isin([1980, 1990, 2000])].iterrows():
+        items.append(dict(label=f"{row['label']} Still Active", value=f"{row['pct_active']:.0f}%",
+                          help=f"{int(row['active']):,} of {int(row['issued']):,} licenses."))
+    if items:
+        _render_stat_row(items)
+
+
+def plot_license_survival(filtered_df):
+    """Kaplan-Meier curve: chance a license is still on the rolls N years after issue."""
+    if 'License Status' not in filtered_df.columns or not pd.api.types.is_datetime64_any_dtype(filtered_df['Original Issue Date']):
+        return
+    curve = license_survival(filtered_df, pd.Timestamp.now())
+    if len(curve) < 2:
+        return
+
+    st.subheader("How Long Licenses Stay on the Rolls")
+    st.caption(
+        "Estimated chance that a license is still on the rolls N years after it was first "
+        "issued (a Kaplan-Meier survival curve). A license leaves the rolls when its status is "
+        "anything but Active, as of its last expiration date. Licenses that are still Active "
+        "count only for the years they have existed so far, so recent licenses don't skew the "
+        "curve. The same caveat about long-gone licenses applies, so the far right of the "
+        "curve is the least certain part."
+    )
+
+    fig = go.Figure(go.Scatter(
+        x=curve.index, y=(curve * 100).round(2),
+        mode='lines', line=dict(color=PRIMARY, width=2.5, shape='hv'),
+        fill='tozeroy', fillcolor='rgba(31, 78, 121, 0.10)',
+        name='Still on the rolls',
+        hovertemplate='%{x:.1f} years after issue<br>%{y:.1f}% still on the rolls<extra></extra>',
+    ))
+    fig.add_hline(y=50, line=dict(color=MUTED, dash='dot', width=1))
+    fig.update_layout(xaxis_title="Years since first issued", yaxis_title="% still on the rolls",
+                      yaxis=dict(range=[0, 102], ticksuffix='%'), height=420, showlegend=False)
+    _show_chart(fig)
+
+    items = []
+    med = median_survival(curve)
+    if med is not None:
+        items.append(dict(label="Median Time on the Rolls", value=f"{med:.0f} yrs",
+                          help="Half of licenses are expected to leave the rolls by this point."))
+    for t in (20, 30, 40):
+        s = survival_at(curve, t)
+        if s is not None:
+            items.append(dict(label=f"Still On After {t} Years", value=f"{s:.0%}"))
+    if items:
+        _render_stat_row(items)
 
 
 # ---------- Average license age per year ----------
@@ -1523,10 +1750,10 @@ def plot_avg_license_age_per_year(filtered_df, start_year=None, end_year=None):
         xaxis_title="Year",
         yaxis_title="Average Age (years)",
         height=440,
-        hovermode='x unified',
+        hovermode='x',
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    _show_chart(fig)
 
     valid = {y: a for y, a in zip(years, avg_ages) if a is not None}
     if valid:
@@ -1601,7 +1828,7 @@ def plot_years_licensed(filtered_df):
         showlegend=False,
         bargap=0.12,
     )
-    st.plotly_chart(fig, use_container_width=True)
+    _show_chart(fig)
 
     n_senior = int((tenure >= SENIOR_TENURE_YEARS).sum())
     n_new = int((tenure < 10).sum())
@@ -1635,8 +1862,8 @@ def _get_current_filters_from_session(df) -> dict:
         start_year, end_year = 1900, pd.Timestamp.now().year
 
     return {
-        'states': selected_states or states,
-        'statuses': selected_statuses or statuses,
+        'states': selected_states if states else None,
+        'statuses': selected_statuses if statuses else None,
         'start_year': start_year,
         'end_year': end_year,
         'comparison_state': st.session_state.get('comparison_state', 'None'),
@@ -1900,12 +2127,20 @@ def main():
         st.query_params.from_dict(_build_share_params(filters))
         st.sidebar.success("URL updated — copy it from your browser address bar.")
 
-    full_df = df.copy()
+    # Base for the comparison-state overlay: every filter except State, so the
+    # overlay honours License Status (it used to include all statuses).
+    full_df = apply_filters(df, {**filters, 'states': None})
     filtered_df = apply_filters(df, filters)
-    status_agnostic_df = apply_filters(df, {**filters, 'statuses': []})
+    status_agnostic_df = apply_filters(df, {**filters, 'statuses': None})
 
     if filtered_df is None or filtered_df.empty:
-        st.warning("No records match the selected filters. Try adjusting your filter criteria.")
+        if filters.get('states') == [] or filters.get('statuses') == []:
+            st.warning(
+                "Every option is unticked in a sidebar filter, so no records are shown. "
+                "Tick **(Select All)** in the State or License Status filter to bring them back."
+            )
+        else:
+            st.warning("No records match the selected filters. Try adjusting your filter criteria.")
         return
 
     create_visualizations(
