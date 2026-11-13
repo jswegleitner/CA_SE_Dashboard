@@ -63,6 +63,27 @@ HISTORY_CATEGORY_COLORS = {
 }
 
 
+# Exam-result strands on the History tab (see dashboard_lib.exam_results). Checked
+# with the dataviz validator on all pairs, light and dark. Green/amber sits at
+# protan delta-E 7.9, legal only with a second cue, so each strand also has its
+# own marker shape (EXAM_STRAND_SYMBOLS). The darker PRIMARY failed the
+# lightness band and slate gray reads as no color, so neither is used here.
+EXAM_STRAND_COLORS = {
+    'vertical': "#2563EB",
+    'lateral': ACCENT,
+    'whole': "#059669",
+}
+EXAM_STRAND_SYMBOLS = {
+    'vertical': 'circle',
+    'lateral': 'diamond',
+    'whole': 'square',
+}
+
+
+def exam_strand_color(strand) -> str:
+    return EXAM_STRAND_COLORS.get(str(strand).strip(), NEUTRAL)
+
+
 def history_category_color(category) -> str:
     return HISTORY_CATEGORY_COLORS.get(str(category).strip(), NEUTRAL)
 

@@ -72,11 +72,25 @@ from dashboard_lib.history import (
     early_record_coverage,
     event_card_html,
 )
+from dashboard_lib.exam_results import (
+    EXAM_ERAS,
+    STRANDS,
+    STRAND_LABELS,
+    exam_results_path,
+    read_exam_results_csv,
+    era_bounds,
+    sittings as exam_sittings,
+    licenses_after_sittings,
+    era_rate_summary,
+)
 from dashboard_lib.theme import (
     register_plotly_template,
     DASHBOARD_CSS,
     HISTORY_CATEGORY_COLORS,
     history_category_color,
+    EXAM_STRAND_SYMBOLS,
+    exam_strand_color,
+    GRID,
     INK as INK_TEXT,
     PRIMARY,
     ACCENT,
@@ -2321,7 +2335,8 @@ def _history_data_notes(df: Optional[pd.DataFrame]) -> str:
     notes.append(
         "- **Two drops are real, and both follow an exam change.** Only 26 licenses were issued in "
         "February 1985, the first results after grading on a curve ended. New licenses then fell by "
-        "about half in 2024 and 2025, the first two years of the computer-based exam."
+        "about half in 2024 and 2025, the first two years of the computer-based exam. The exam "
+        "section below covers both."
     )
     notes.append(
         "- **Some issue dates are not original.** A number of licenses carry an issue date years "
@@ -2329,6 +2344,416 @@ def _history_data_notes(df: Optional[pd.DataFrame]) -> str:
         "reciprocity grant. The last chart on the Time tab flags them."
     )
     return "\n".join(notes)
+
+
+# ---------- History tab: exam results ----------
+EXAM_NATIONAL_KEY = 'history_exam_national'
+EXAM_BAR_ALPHA = 0.30          # license bars sit behind the passer markers
+EXAM_STRAND_NUDGE_DAYS = 28    # side-by-side markers for two pieces at one sitting
+EXAM_BAR_WIDTH_DAYS = 150
+
+EXAM_INTRO = """
+Every structural title in this data rests on a structural exam, and since 2003 that exam has
+changed shape four times. A pass rate therefore measures something different in each era: the
+whole exam, one of two separate exams, one half of a 16-hour exam, or one of four
+computer-based sections. The chart follows the two parts of the exam that run through every
+format, design for gravity loads (vertical forces) and design for earthquakes and wind
+(lateral forces), and sets the number of California candidates who passed at each sitting
+against the licenses issued before the next one.
+"""
+
+EXAM_ABOUT = """
+California results are the Board's own figures for all California candidates at each sitting
+(it has never split first-time from repeat takers, or buildings from bridges). National results
+are NCEES first-time takers unless the hover says otherwise. Most come from the Board's archived
+statistics pages, its bulletins and meeting packets, NCEES's *Licensure Exchange* and *Squared*
+reports, and, for twenty national sittings from 2012 to 2023, one private compilation (William
+S. Godfrey's) that matches every NCEES figure it could be checked against.
+
+The full record, including repeat-taker rates, fiscal-year totals, the 2001-2002 national
+results and every conflict between sources, is in `research/se_exam_pass_rates.csv` and the
+report `reports/CA SE exam pass rates.md`. The rows drawn here are kept in
+`data/se_exam_results.csv`.
+"""
+
+
+@st.cache_data
+def _load_exam_results_cached(file_mtime=None):
+    try:
+        return read_exam_results_csv(), None
+    except ValueError as exc:
+        return None, str(exc)
+
+
+def load_exam_results():
+    path = exam_results_path()
+    return _load_exam_results_cached(file_mtime=path.stat().st_mtime if path.exists() else None)
+
+
+def _sitting_label(ts) -> str:
+    ts = pd.Timestamp(ts)
+    return f"{ts.strftime('%B')} {ts.year}"
+
+
+def _exam_hover_rows(grp: pd.DataFrame) -> list:
+    evidence_text = {
+        'primary': 'Published figure',
+        'derived': 'Worked out from published figures',
+        'secondary': 'Third-party compilation, not confirmed by NCEES',
+    }
+    rows = []
+    for r in grp.to_dict('records'):
+        if pd.notna(r['passed']):
+            counts = f"{int(r['passed'])} of {int(r['tested'])} passed" if pd.notna(r['tested']) else f"{int(r['passed'])} passed"
+        elif pd.notna(r['passed_est']):
+            counts = f"about {int(r['passed_est'])} of {int(r['tested'])} passed"
+        elif pd.notna(r['tested']):
+            counts = f"{int(r['tested'])} tested"
+        else:
+            counts = 'No counts published'
+        who = 'California, all takers' if r['scope'] == 'California' else (
+            'National, first-time takers' if r['population'] == 'first_time' else 'National, all takers')
+        rows.append([
+            _sanitize_hover(r['exam']),
+            _sitting_label(r['date']),
+            who,
+            counts,
+            evidence_text.get(r['evidence'], ''),
+            ('<br>' + _hover_lines(r['note'])) if r['note'] else '',
+        ])
+    return rows
+
+
+_EXAM_HOVER = (
+    '<b>%{customdata[0]}</b><br>%{customdata[1]} · %{customdata[2]}<br>'
+    '<b>%{y:.0f}%</b> passed · %{customdata[3]}<br>'
+    '<i>%{customdata[4]}</i>%{customdata[5]}<extra></extra>'
+)
+
+
+def plot_exam_results(results: pd.DataFrame, licenses_df: Optional[pd.DataFrame], show_national: bool):
+    """Pass rates at each sitting above passers and the licenses that followed.
+
+    Two stacked panels on one time axis rather than one chart with two scales:
+    rates are percentages, passers and licenses are head counts. Lines break at
+    each format change because a rate on one side of the break is not the same
+    measure as a rate on the other. Each strand keeps its color and marker shape
+    across formats; hollow markers are worked out from other published figures.
+    """
+    from plotly.subplots import make_subplots
+
+    now = pd.Timestamp.now().normalize()
+    x_lo = pd.Timestamp('2002-07-01')
+    x_hi = now + pd.DateOffset(months=9)
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.07, row_heights=[0.55, 0.45])
+
+    # Era bands across both panels, with the format named at the top of each.
+    for i, (key, _start, _end, label, desc) in enumerate(EXAM_ERAS):
+        lo, hi = era_bounds(key, today=x_hi)
+        lo, hi = max(lo, x_lo), min(hi, x_hi)
+        if lo >= hi:
+            continue
+        if i % 2 == 1:
+            # exclude_empty_subplots=False: the bands go on before any trace exists.
+            fig.add_vrect(x0=lo, x1=hi, fillcolor=_tint(PRIMARY, 0.06), layer='below', line_width=0,
+                          row='all', col=1, exclude_empty_subplots=False)
+        if i > 0:
+            fig.add_vline(x=lo, line=dict(color=MUTED, width=1, dash='dot'), layer='below',
+                          row='all', col=1, exclude_empty_subplots=False)
+        fig.add_annotation(
+            x=lo + (hi - lo) / 2, y=1.0, xref='x', yref='y domain', yanchor='bottom',
+            text=f"<b>{html.escape(label)}</b>", showarrow=False, font=dict(size=11, color=NEUTRAL),
+            hovertext=html.escape(desc),
+        )
+
+    ca = results[results['scope'] == 'California']
+    ca_sittings = set(ca.loc[ca['pass_rate_pct'].notna(), 'date'])
+    national = results[results['scope'] == 'National']
+    # National-only sittings (for now, just the newest) are always drawn so the
+    # chart does not end on the 2025 low when a later result exists.
+    national_only = national[~national['date'].isin(ca_sittings) & (national['date'] > max(ca_sittings))]
+
+    nudge = {'vertical': -EXAM_STRAND_NUDGE_DAYS, 'lateral': EXAM_STRAND_NUDGE_DAYS, 'whole': -EXAM_STRAND_NUDGE_DAYS}
+
+    def _markers(grp, color, strand, hollow_mask, size=9):
+        return dict(
+            size=size,
+            symbol=[EXAM_STRAND_SYMBOLS[strand] + ('-open' if h else '') for h in hollow_mask],
+            color=color,
+            line=dict(color=[color if h else 'white' for h in hollow_mask], width=[2 if h else 1.5 for h in hollow_mask]),
+        )
+
+    # ---- Panel 1: pass rates ----
+    shown_in_legend = set()
+    for strand in STRANDS:
+        color = exam_strand_color(strand)
+        for era_key in [e[0] for e in EXAM_ERAS]:
+            grp = ca[(ca['strand'] == strand) & (ca['era'] == era_key)].sort_values('date')
+            if grp['pass_rate_pct'].notna().sum() == 0:
+                continue
+            fig.add_trace(go.Scatter(
+                x=grp['date'], y=grp['pass_rate_pct'],
+                mode='lines+markers', connectgaps=False,
+                name=STRAND_LABELS[strand], legendgroup=strand,
+                showlegend=strand not in shown_in_legend,
+                line=dict(color=color, width=2),
+                marker=_markers(grp, color, strand, (grp['evidence'] == 'derived').tolist()),
+                customdata=_exam_hover_rows(grp), hovertemplate=_EXAM_HOVER,
+            ), row=1, col=1)
+            shown_in_legend.add(strand)
+
+        nat = national[national['strand'] == strand]
+        if not show_national:
+            nat = nat[nat.index.isin(national_only.index)]
+        for era_key in [e[0] for e in EXAM_ERAS]:
+            grp = nat[nat['era'] == era_key].sort_values('date')
+            if grp['pass_rate_pct'].notna().sum() == 0:
+                continue
+            fig.add_trace(go.Scatter(
+                x=grp['date'], y=grp['pass_rate_pct'],
+                mode='lines+markers', connectgaps=False,
+                name=f"National · {STRAND_LABELS[strand].lower()}", legendgroup=f"nat-{strand}",
+                showlegend=show_national and f"nat-{strand}" not in shown_in_legend,
+                line=dict(color=color, width=1.5, dash='dot'),
+                marker=_markers(grp, color, strand, [True] * len(grp), size=8),
+                opacity=0.85,
+                customdata=_exam_hover_rows(grp), hovertemplate=_EXAM_HOVER,
+            ), row=1, col=1)
+            shown_in_legend.add(f"nat-{strand}")
+
+    if not show_national and not national_only.empty:
+        top = national_only.sort_values('pass_rate_pct', ascending=False).iloc[0]
+        fig.add_annotation(
+            x=top['date'], y=top['pass_rate_pct'], xref='x', yref='y', ax=-58, ay=-18,
+            text=f"National, {top['date'].strftime('%b %Y')}", showarrow=True, arrowhead=0,
+            arrowcolor=MUTED, font=dict(size=11, color=NEUTRAL),
+        )
+
+    fig.update_yaxes(title_text='Passed at the sitting', ticksuffix='%', range=[0, 72],
+                     dtick=20, fixedrange=True, row=1, col=1)
+
+    # ---- Panel 2: licenses after each sitting, and California passers ----
+    windows = licenses_after_sittings(licenses_df, exam_sittings(results), today=now)
+    if not windows.empty:
+        fig.add_trace(go.Bar(
+            x=windows['date'], y=windows['licenses'],
+            width=[EXAM_BAR_WIDTH_DAYS * 86400000] * len(windows),
+            name='Licenses issued before the next sitting',
+            marker=dict(
+                color=[_tint(PRIMARY, 0.12 if p else EXAM_BAR_ALPHA) for p in windows['partial']],
+                line=dict(color=PRIMARY, width=[1.5 if p else 0 for p in windows['partial']]),
+            ),
+            customdata=[
+                [f"{s:%b %Y}", f"{e:%b %Y}", ' (so far)' if p else '']
+                for s, e, p in zip(windows['window_start'], windows['window_end'], windows['partial'])
+            ],
+            hovertemplate='<b>%{y} licenses issued%{customdata[2]}</b><br>'
+                          '%{customdata[0]} to %{customdata[1]}<extra></extra>',
+        ), row=2, col=1)
+
+    for strand in STRANDS:
+        color = exam_strand_color(strand)
+        grp = ca[(ca['strand'] == strand) & ca['passed_est'].notna()].sort_values('date')
+        if grp.empty:
+            continue
+        hollow = grp['passed'].isna().tolist()
+        fig.add_trace(go.Scatter(
+            x=grp['date'] + pd.to_timedelta(nudge[strand], unit='D'), y=grp['passed_est'],
+            mode='markers', name=STRAND_LABELS[strand], legendgroup=strand, showlegend=False,
+            marker=_markers(grp, color, strand, hollow),
+            customdata=[
+                [_sanitize_hover(r['exam']), _sitting_label(r['date']),
+                 ('about ' if pd.isna(r['passed']) else '') + f"{int(r['passed_est'])}",
+                 f"{int(r['tested'])}" if pd.notna(r['tested']) else '?']
+                for r in grp.to_dict('records')
+            ],
+            hovertemplate='<b>%{customdata[0]}</b><br>%{customdata[1]}<br>'
+                          '%{customdata[2]} of %{customdata[3]} California candidates passed<extra></extra>',
+        ), row=2, col=1)
+
+    fig.update_yaxes(title_text='People', rangemode='tozero', fixedrange=True, row=2, col=1)
+    fig.update_xaxes(range=[x_lo, x_hi], dtick='M24', tickformat='%Y')
+    fig.update_layout(
+        height=680,
+        hovermode='closest',
+        barmode='overlay',
+        margin=dict(l=24, r=24, t=36, b=90),
+        legend=dict(orientation='h', yanchor='top', y=-0.1, xanchor='left', x=0),
+    )
+    _show_chart(fig)
+
+
+def _exam_stat_items(results: pd.DataFrame) -> list:
+    """One card per exam format: the median California pass rate per sitting."""
+    summary = era_rate_summary(results, scope='California')
+    what = {
+        'state': 'the whole exam',
+        'split': 'either of the two separate exams (Structural II or SE III)',
+        'sixteen': 'one of the two components',
+        'cbt': 'one buildings depth section',
+    }
+    items = []
+    for r in summary.to_dict('records'):
+        span = f"{r['first'].year}" if r['first'].year == r['last'].year else f"{r['first'].year}–{r['last'].year}"
+        if r['n'] == 1:
+            row = results[(results['scope'] == 'California') & (results['era'] == r['era'])
+                          & results['pass_rate_pct'].notna()].iloc[0]
+            help_text = (f"{_sitting_label(row['date'])}: {int(row['passed'])} of {int(row['tested'])} candidates "
+                         "passed. The only California-written structural exam with a published result.")
+        else:
+            help_text = (f"Middle value of {r['n']} California results, {r['low']:.0f}% to {r['high']:.0f}%. "
+                         f"Each is the share passing {what.get(r['era'], 'one piece of the exam')} at one sitting, "
+                         "so eras are not strictly comparable.")
+        items.append(dict(label=f"{r['label']}, {span}", value=f"{r['median']:.0f}%", help=help_text))
+    return items
+
+
+def _exam_notes(results: pd.DataFrame, licenses_df: Optional[pd.DataFrame]) -> str:
+    """Markdown bullets tying the exam results to the license counts.
+
+    Figures that come from the data are computed here so the text cannot drift
+    from the chart.
+    """
+    now = pd.Timestamp.now().normalize()
+    ca = results[results['scope'] == 'California']
+    windows = licenses_after_sittings(licenses_df, exam_sittings(results), today=now).set_index('date')
+    notes = [
+        "- **Pass rates are not one series.** A 2003 rate is for the whole exam, a 2004–2011 rate for "
+        "one of two separate exams, a 2011–2023 rate for one of two components and a rate from 2024 for "
+        "one of four sections, and a candidate had to clear every piece. Colors and shapes follow the "
+        "part of the exam rather than the format: blue circles for vertical forces, amber diamonds for "
+        "lateral forces and seismic design (California's own SE III exam, then the Lateral component "
+        "and section), green squares for a whole exam or the general national Structural II. Lines "
+        "break where the format changed.",
+    ]
+
+    # The last SE III sitting (October 2011) shared its window with the first
+    # 16-hour completions, so only the years when SE III was the last step count.
+    se3 = ca[ca['exam'].str.contains('SE III') & ca['passed'].notna() & (ca['date'] < pd.Timestamp('2011-04-01'))]
+    se3 = se3[se3['date'].isin(windows.index)]
+    if not se3.empty:
+        diffs = (se3.set_index('date')['passed'] - windows.loc[se3['date'], 'licenses']).abs()
+        best = se3.sort_values('passed').iloc[-1]
+        notes.append(
+            f"- **The head counts line up better than the rates.** From {se3['date'].min().year} to "
+            f"{se3['date'].max().year} the number passing California's SE III each October came within "
+            f"{int(diffs.max())} of the licenses issued before the next October exam. "
+            f"{int(best['passed'])} passed in {_sitting_label(best['date'])}, the most in the record, and "
+            f"{int(windows.loc[best['date'], 'licenses'])} licenses followed. On the 16-hour exam a candidate "
+            "needed both components, often passed at different sittings, so each batch tracks the two "
+            "component counts loosely rather than either one."
+        )
+
+    notes.append(
+        "- **Before 2003 there is only a recollection.** No California structural pass rate survives "
+        "from before October 2003, when 25% passed the last state-written exam. Henry Degenkolb recalled "
+        "the share passing falling from over 30% to about 10% when grading on a curve ended in the "
+        "mid-1980s. If he meant the structural exam, that would explain why only 26 licenses were "
+        "issued in February 1985."
+    )
+
+    cbt = ca[(ca['era'] == 'cbt') & ca['pass_rate_pct'].notna()]
+    if not cbt.empty:
+        est = cbt['passed_est'].dropna()
+        cbt_windows = windows[(windows.index.isin(cbt['date'])) & ~windows['partial']]
+        nat_cbt = results[(results['scope'] == 'National') & (results['era'] == 'cbt')
+                          & (results['date'] < pd.Timestamp('2026-01-01'))]['pass_rate_pct'].dropna()
+        text = (
+            "- **2024–2025: the depth sections were the bottleneck.** California's buildings depth "
+            f"sections passed {cbt['pass_rate_pct'].min():.0f}% to {cbt['pass_rate_pct'].max():.0f}% of exams, "
+            f"about {int(est.min())} to {int(est.max())} people per section per sitting"
+        )
+        if not nat_cbt.empty:
+            text += f", against {nat_cbt.min():.0f}% to {nat_cbt.max():.0f}% nationally"
+        text += ". "
+        if not cbt_windows.empty:
+            text += (
+                f"Licenses issued between sittings ran at {int(cbt_windows['licenses'].min())} to "
+                f"{int(cbt_windows['licenses'].max())}, well above that, because candidates who had "
+                "passed one paper component by October 2023 needed only the other half, and some "
+                "licenses probably went to engineers already licensed in other states. "
+            )
+        text += ("Nationally the breadth sections passed 40% to 49% of first-time takers throughout, "
+                 "so the drop came from the depth format.")
+        notes.append(text)
+
+    nat_latest = results[(results['scope'] == 'National') & (results['date'] >= pd.Timestamp('2026-01-01'))]
+    if not nat_latest.empty:
+        rates = nat_latest.set_index('strand')['pass_rate_pct']
+        last = nat_latest['date'].max()
+        text = (
+            "- **2026: rates recover.** NCEES added an hour to the depth sections, and its audit "
+            f"committee listed a standard-setting study on the {_sitting_label(last)} exams. "
+            "National first-time rates on the "
+            f"buildings depth sections rose to {rates.get('vertical', float('nan')):.0f}% vertical and "
+            f"{rates.get('lateral', float('nan')):.0f}% lateral. No source says how much of the change "
+            "came from the extra time and how much from a new passing standard. The Board's California "
+            "figures for January to June 2026, which combine breadth and depth, were 46% vertical and "
+            "45% lateral."
+        )
+        if licenses_df is not None and 'Original Issue Date' in licenses_df.columns:
+            issued = pd.to_datetime(licenses_df['Original Issue Date'], errors='coerce')
+            ytd = int(((issued.dt.year == now.year) & (issued <= now)).sum())
+            prior = int((issued.dt.year == now.year - 1).sum())
+            text += f" {ytd} licenses have been issued so far in {now.year}, against {prior} in all of {now.year - 1}."
+        notes.append(text)
+
+    notes.append(
+        "- **What the record cannot show.** Neither the Board nor NCEES publishes how many candidates "
+        "finished the whole exam, so no figure here is a rate of becoming a structural engineer. The "
+        "Board never published Fall 2017 results. The 2024–2025 California section results were read "
+        "from charts in Board meeting packets and are worth checking against the originals. Hollow "
+        "markers are worked out from other published figures."
+    )
+    return "\n".join(notes)
+
+
+def _render_exam_section(results: Optional[pd.DataFrame], error: Optional[str], all_df: Optional[pd.DataFrame]):
+    if error:
+        st.warning(f"The exam results file could not be read: {error}")
+        return
+    if results is None or results.empty:
+        return
+
+    st.subheader("The exam as the gate: pass rates since 2003")
+    st.markdown(EXAM_INTRO)
+    show_national = st.toggle(
+        "Compare with national first-time takers",
+        value=False,
+        key=EXAM_NATIONAL_KEY,
+        help="Adds NCEES national results as dotted lines. They cover first-time takers and California "
+             "covers everyone, so the two are not the same measure.",
+    )
+    plot_exam_results(results, all_df, show_national)
+    st.caption(
+        "Top: the share of California candidates passing each piece of the exam at each sitting. "
+        "Bottom: how many passed (markers) and how many structural licenses were issued between that "
+        "sitting and the next (bars; the last bar is still filling). Shaded bands mark the four exam "
+        "formats. Hover any point for the exam, the counts and where the figure comes from."
+    )
+    stat_items = _exam_stat_items(results)
+    if stat_items:
+        _render_stat_row(stat_items)
+
+    st.markdown("**Reading the exam results against the license counts**")
+    st.markdown(_exam_notes(results, all_df))
+
+    with st.expander("Exam results data and sources"):
+        table = results.copy()
+        table['Sitting'] = table['date'].map(_sitting_label)
+        table['Who'] = [
+            'California, all' if s == 'California' else ('National, first-time' if p == 'first_time' else 'National, all')
+            for s, p in zip(table['scope'], table['population'])
+        ]
+        table = table.rename(columns={
+            'exam': 'Exam', 'tested': 'Tested', 'passed': 'Passed', 'pass_rate_pct': 'Pass rate (%)',
+            'evidence': 'Evidence', 'note': 'Note', 'source': 'Source',
+        })
+        st.dataframe(
+            table[['Sitting', 'Exam', 'Who', 'Tested', 'Passed', 'Pass rate (%)', 'Evidence', 'Note', 'Source']],
+            hide_index=True, use_container_width=True,
+        )
+        st.markdown(EXAM_ABOUT)
 
 
 def render_history_tab(all_df: Optional[pd.DataFrame], events: Optional[pd.DataFrame], error: Optional[str]):
@@ -2369,6 +2794,9 @@ def render_history_tab(all_df: Optional[pd.DataFrame], events: Optional[pd.DataF
 
     st.subheader("Reading the license counts against this history")
     st.markdown(_history_data_notes(all_df))
+
+    exam_results, exam_error = load_exam_results()
+    _render_exam_section(exam_results, exam_error, all_df)
 
     st.subheader("Chronology")
     if shown.empty:
